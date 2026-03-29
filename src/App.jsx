@@ -15,25 +15,19 @@ import AddListing from './Pages/AddListing';
 import MyListings from './Pages/MyListings';
 import ListingDetail from './Pages/ListingDetail';
 import ActivityTracking from './Pages/ActivityTracking';
-import { HashRouter } from "react-router-dom";
-
 function App() {
   return (
-    <>
-      <HashRouter basename = "/AuctionFloor">
-      <Routes>
-        <Route path={'/'} element={<AuctionFloor />} />
-        <Route path={'/signup'} element={<SignUpPage />} />
-        <Route path={'/dashboard'} element={<Dashboard />} />
-        <Route path={'/new-listing'} element={<AddListing />} />
-        <Route path={'/my-listings'} element={<MyListings />} />
-        <Route path={'/listing/:id'} element={<ListingDetail />} />
-        <Route path={'/dashboard/activity'} element={<ActivityTracking />} />
-        <Route path={'/dashboard/notifications'} element={<Notifications />} />
-        <Route path={'*'} element={<AuctionFloor />} />
-      </Routes>
-    </HashRouter>
-    </>
+    <Routes>
+      <Route path="/" element={<AuctionFloor />} />
+      <Route path="/signup" element={<SignUpPage />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/new-listing" element={<AddListing />} />
+      <Route path="/my-listings" element={<MyListings />} />
+      <Route path="/listing/:id" element={<ListingDetail />} />
+      <Route path="/dashboard/activity" element={<ActivityTracking />} />
+      <Route path="/dashboard/notifications" element={<Notifications />} />
+      <Route path="*" element={<AuctionFloor />} />
+    </Routes>
   )
 }
 
