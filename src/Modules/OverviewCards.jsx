@@ -2,45 +2,52 @@ import React from 'react';
 import styles from '../Pages/Dashboard.module.css';
 import { FaCar, FaGavel, FaMoneyBillWave, FaChartLine, FaBolt, FaStar } from 'react-icons/fa';
 
-const OverviewCards = ({ listings = [] }) => {
+const OverviewCards = ({ listings = [], participating = [] }) => {
   const activeCount = listings.length;
+  const participationCount = participating.length;
+  const winningCount = participating.filter(p => p.isLeading).length;
 
-  const totalBids = listings.reduce((sum, item) => sum + (item.NumberOfBids || 0), 0);
-  const totalSales = listings.reduce((sum, item) => sum + (item.CurrentPrice || item.StartingPrice || 0), 0);
+  const totalBidsReceived = listings.reduce((sum, item) => sum + (item.NumberOfBids || 0), 0);
+  const totalValuation = listings.reduce((sum, item) => sum + (item.CurrentPrice || item.StartingPrice || 0), 0);
 
   const formatZAR = (amount) => {
-    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat('en-ZA', { 
+      style: 'currency', 
+      currency: 'ZAR', 
+      maximumFractionDigits: 0, 
+      minimumFractionDigits: 0 
+    }).format(amount);
   };
 
   return (
     <div className={styles.statsGrid}>
       <div className={styles.statCard}>
-        <div className={styles.statHeader}>Active Listings</div>
+        <div className={styles.statHeader}>My Listings</div>
         <h3 className={styles.statValue}>{activeCount}</h3>
         <FaCar className={styles.statIconBg} />
         <div className={styles.statFooter}>
           <FaChartLine className={styles.statTrendUp} />
-          <span>+0 this week</span>
+          <span>{totalBidsReceived} bids received</span>
         </div>
       </div>
 
       <div className={styles.statCard}>
-        <div className={styles.statHeader}>Total Bids Received</div>
-        <h3 className={styles.statValue}>{totalBids}</h3>
+        <div className={styles.statHeader}>Participating In</div>
+        <h3 className={styles.statValue}>{participationCount}</h3>
         <FaGavel className={styles.statIconBg} />
         <div className={styles.statFooter}>
-          <FaBolt style={{ color: '#fff' }} />
-          <span>Average {activeCount > 0 ? Math.round(totalBids / activeCount) : 0} bids/item</span>
+          <FaBolt style={{ color: winningCount > 0 ? '#10B981' : '#fff' }} />
+          <span>{winningCount} Winning currently</span>
         </div>
       </div>
 
       <div className={styles.statCard}>
-        <div className={styles.statHeader}>Total Valuation</div>
-        <h3 className={`${styles.statValue} ${styles.accent}`}>{formatZAR(totalSales)}</h3>
+        <div className={styles.statHeader}>Inventory Value</div>
+        <h3 className={`${styles.statValue} ${styles.accent}`}>{formatZAR(totalValuation)}</h3>
         <FaMoneyBillWave className={styles.statIconBg} />
         <div className={styles.statFooter}>
           <FaStar style={{ color: '#ffb480' }} />
-          <span style={{ color: '#ffb480' }}>Top 5% Seller Status</span>
+          <span style={{ color: '#ffb480' }}>Premium Tier Seller</span>
         </div>
       </div>
     </div>

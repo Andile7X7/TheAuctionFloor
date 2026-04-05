@@ -12,7 +12,7 @@ const Login = () => {
     email: '', password: ''
   })
 
-  console.log(formData)
+
 
   function handleChange(event) {
     setFormData((prevFormData) => {
@@ -45,8 +45,19 @@ const Login = () => {
     }
   }
 
-
-
+  async function handleGoogleSignIn() {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      alert(error.message);
+    }
+  }
 
   return (
     <>
@@ -71,7 +82,7 @@ const Login = () => {
           </form>
 
           <p id={styles.Auth}>Authentication</p>
-          <button id={styles.btnSignUpWithGoogle}> <FaGoogle id={styles.GoogleIcon} />  LOG IN WITH GOOGLE</button>
+          <button id={styles.btnSignUpWithGoogle} type="button" onClick={handleGoogleSignIn}> <FaGoogle id={styles.GoogleIcon} />  LOG IN WITH GOOGLE</button>
 
           <p id={styles.LogIn}> <span id={styles.LogInRedirect}>Don't Have An Account?</span> <Link to="/signup">Create One</Link></p>
         </div>

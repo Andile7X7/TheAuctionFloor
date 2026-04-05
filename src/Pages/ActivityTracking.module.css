@@ -46,8 +46,8 @@
 }
 
 .activityCard {
-    background-color: #121620;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -58,7 +58,7 @@
 }
 
 .activityCard:hover {
-    background-color: #1a1e2a;
+    background-color: var(--bg);
     transform: translateX(4px);
 }
 
@@ -94,7 +94,7 @@
     margin: 4px 0 0 0;
     font-size: 16px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
 }
 
 .dataRow {
@@ -110,7 +110,7 @@
 
 .label {
     font-size: 10px;
-    color: #9CA3AF;
+    color: var(--text);
     font-weight: 600;
     letter-spacing: 0.5px;
 }
@@ -118,7 +118,7 @@
 .val {
     font-size: 15px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
 }
 
 .statusAction {
@@ -163,7 +163,7 @@
 }
 
 .viewBtn:hover {
-    color: #fff;
+    color: var(--accent);
 }
 
 .emptyState {

@@ -12,6 +12,7 @@ const ActivityTracking = () => {
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Get tab from URL query params
   const queryParams = new URLSearchParams(location.search);
@@ -98,8 +99,19 @@ const ActivityTracking = () => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 }).format(amount || 0);
   };
 
+  const filteredItems = items.filter(item => {
+    const listing = item.listings;
+    const searchStr = searchQuery.toLowerCase().trim();
+    if (!searchStr) return true;
+    return (
+      listing.Make.toLowerCase().includes(searchStr) ||
+      listing.Model.toLowerCase().includes(searchStr) ||
+      listing.Year.toString().includes(searchStr)
+    );
+  });
+
   return (
-    <DashboardLayout user={user}>
+    <DashboardLayout user={user} searchTerm={searchQuery} onSearch={setSearchQuery}>
       <div className={styles.activityContainer}>
         {/* Navigation Tabs */}
         <div className={styles.tabsHeader}>
@@ -127,15 +139,19 @@ const ActivityTracking = () => {
         <div className={styles.contentArea}>
           {loading ? (
             <div className={styles.statusMsg}>Loading your activity...</div>
-          ) : items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div className={styles.emptyState}>
-              <h3>Nothing to show in {currentTab}</h3>
-              <p>Explore the Auction Floor to start participating!</p>
-              <button className={styles.browseBtn} onClick={() => navigate('/')}>GO TO AUCTIONS</button>
+              <h3>{searchQuery ? `No matches for "${searchQuery}"` : `Nothing to show in ${currentTab}`}</h3>
+              <p>{searchQuery ? 'Try adjusting your search terms or check your spelling.' : 'Explore the Auction Floor to start participating!'}</p>
+              {searchQuery ? (
+                <button className={styles.browseBtn} onClick={() => setSearchQuery('')}>CLEAR SEARCH</button>
+              ) : (
+                <button className={styles.browseBtn} onClick={() => navigate('/')}>GO TO AUCTIONS</button>
+              )}
             </div>
           ) : (
             <div className={styles.cardList}>
-              {items.map((item, idx) => {
+              {filteredItems.map((item, idx) => {
                 const listing = item.listings;
                 const userBid = item.amount;
                 const isOutbid = currentTab === 'bids' && listing.CurrentPrice > userBid;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import DashboardLayout from '../Modules/DashboardLayout';
@@ -14,8 +14,9 @@ const MyListings = () => {
 
   // Modal State
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({ id: null, Make: '', Model: '', StartingPrice: '' });
+  const [editData, setEditData] = useState({ id: null, Make: '', Model: '', status: 'active' });
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const gridRef = useRef(null);
 
   useEffect(() => {
     const fetchMyListings = async () => {
@@ -45,6 +46,12 @@ const MyListings = () => {
     fetchMyListings();
   }, [navigate]);
 
+  useEffect(() => {
+    if (searchQuery && gridRef.current) {
+        gridRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [searchQuery]);
+
   const filteredListings = listings.filter(item => {
     const searchStr = searchQuery.toLowerCase();
     return (
@@ -59,15 +66,20 @@ const MyListings = () => {
   };
 
   const confirmDelete = async () => {
-    if (!deleteConfirmId) return;
+    if (!deleteConfirmId || !user) return;
 
     try {
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from('listings')
-        .delete()
-        .eq('id', deleteConfirmId);
+        .delete({ count: 'exact' })
+        .eq('id', deleteConfirmId)
+        .eq('userid', user.id);
 
       if (error) throw error;
+
+      if (count === 0) {
+        console.warn('No rows were deleted — possible RLS policy issue.');
+      }
       
       // Update local state smoothly
       setListings(prev => prev.filter(item => item.id !== deleteConfirmId));
@@ -83,7 +95,7 @@ const MyListings = () => {
       id: item.id,
       Make: item.Make,
       Model: item.Model,
-      StartingPrice: item.StartingPrice
+      status: item.status || 'active'
     });
     setIsEditing(true);
   };
@@ -95,23 +107,58 @@ const MyListings = () => {
 
   const saveEdit = async () => {
     try {
-      const priceNum = parseFloat(editData.StartingPrice);
-      
+      const originalListing = listings.find(l => l.id === editData.id);
+      const isMarkingAsSold = editData.status === 'sold' && originalListing?.status !== 'sold';
+
       const { error } = await supabase
         .from('listings')
         .update({
           Make: editData.Make,
           Model: editData.Model,
-          StartingPrice: priceNum
+          status: editData.status
         })
         .eq('id', editData.id);
 
       if (error) throw error;
 
+      if (isMarkingAsSold) {
+        // Find previous bidders to notify them
+        const { data: bidders } = await supabase
+          .from('bid_history')
+          .select('userid')
+          .eq('listing_id', editData.id);
+
+        const uniqueBidders = [...new Set(bidders?.map(b => b.userid))].filter(uid => uid !== user.id);
+
+        if (uniqueBidders.length > 0) {
+          const notifications = uniqueBidders.map(bidderId => ({
+            recipient_id: bidderId,
+            actor_id: user.id,
+            listing_id: editData.id,
+            type: 'status_change',
+            message: `The ${editData.Make} ${editData.Model} you bid on has been SOLD!`,
+            is_read: false
+          }));
+          await supabase.from('notifications').insert(notifications);
+        }
+
+        // Add to global live feed
+        await supabase.from('activities').insert({
+          userid: user.id,
+          type: 'sold',
+          listing_id: editData.id,
+          entitytype: 'car',
+          metadata: { 
+            carName: `${editData.Make} ${editData.Model}`, 
+            status: 'SOLD' 
+          }
+        });
+      }
+
       // Update local state without refreshing page
       setListings(prev => prev.map(item => {
         if (item.id === editData.id) {
-          return { ...item, Make: editData.Make, Model: editData.Model, StartingPrice: priceNum };
+          return { ...item, Make: editData.Make, Model: editData.Model, status: editData.status };
         }
         return item;
       }));
@@ -143,12 +190,20 @@ const MyListings = () => {
         ) : listings.length === 0 ? (
           <p style={{color: '#9CA3AF'}}>You haven't listed any vehicles yet.</p>
         ) : (
-          <div className={styles.grid}>
+          <div className={styles.grid} ref={gridRef}>
             {filteredListings.map(item => (
               <div key={item.id} className={styles.card} onClick={() => navigate(`/listing/${item.id}`)} style={{cursor: 'pointer'}}>
                 <div className={styles.imageWrapper}>
-                  <div className={styles.liveBadge}>LIVE</div>
-                  <img src={item.ImageURL} alt={item.Model} className={styles.image} />
+                  {item.status === 'sold' ? (
+                    <div style={{
+                      position: 'absolute', top: '10px', left: '10px', 
+                      backgroundColor: '#ef4444', color: '#fff', fontSize: '10px', 
+                      fontWeight: 'bold', padding: '4px 8px', borderRadius: '4px', zIndex: 10
+                    }}>SOLD</div>
+                  ) : (
+                    <div className={styles.liveBadge}>LIVE</div>
+                  )}
+                  <img src={item.ImageURL} alt={item.Model} className={styles.image} style={{ filter: item.status === 'sold' ? 'grayscale(80%) brightness(0.6)' : 'none' }} />
                 </div>
                 
                 <div className={styles.cardBody}>
@@ -189,8 +244,29 @@ const MyListings = () => {
             </div>
             
             <div className={styles.formGroup}>
-              <label>Price (ZAR)</label>
-              <input type="number" name="StartingPrice" value={editData.StartingPrice} onChange={handleEditChange} />
+              <label>Listing Status</label>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button 
+                  type="button"
+                  onClick={() => setEditData(prev => ({ ...prev, status: 'active' }))}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #10B981', 
+                    backgroundColor: editData.status === 'active' || !editData.status ? '#10B981' : 'transparent',
+                    color: editData.status === 'active' || !editData.status ? '#fff' : '#10B981', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s'
+                  }}>
+                  ACTIVE
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setEditData(prev => ({ ...prev, status: 'sold' }))}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #EF4444', 
+                    backgroundColor: editData.status === 'sold' ? '#EF4444' : 'transparent',
+                    color: editData.status === 'sold' ? '#fff' : '#EF4444', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s'
+                  }}>
+                  SOLD (Close)
+                </button>
+              </div>
             </div>
 
             <div className={styles.modalActions}>

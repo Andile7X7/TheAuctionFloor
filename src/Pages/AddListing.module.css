@@ -3,8 +3,7 @@
     background-color: #0e111a;
     display: flex;
     justify-content: center;
-    align-items: center;
-    padding: 40px;
+    padding: 40px 20px;
     font-family: 'Inter', system-ui, sans-serif;
     color: #F9FAFB;
 }
@@ -13,37 +12,46 @@
     background-color: #121620;
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    padding: 40px;
+    padding: 48px;
     width: 100%;
-    max-width: 600px;
+    max-width: 780px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    align-self: flex-start;
 }
 
 .headerRow {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 32px;
+    align-items: flex-start;
+    margin-bottom: 36px;
 }
 
 .title {
-    font-size: 24px;
-    font-weight: 700;
-    margin: 0;
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
     letter-spacing: -0.5px;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: #6B7280;
+    margin: 0;
 }
 
 .backBtn {
     background: none;
     border: none;
     color: #9CA3AF;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
     transition: color 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .backBtn:hover {
@@ -56,6 +64,23 @@
     gap: 20px;
 }
 
+/* Section Labels */
+.sectionLabel {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #6366F1;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sectionHint {
+    font-size: 13px;
+    color: #6B7280;
+    margin: -12px 0 0 0;
+}
+
 .inputGroup {
     display: flex;
     flex-direction: column;
@@ -63,8 +88,8 @@
 }
 
 .label {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
     color: #9CA3AF;
     letter-spacing: 0.5px;
     text-transform: uppercase;
@@ -72,17 +97,22 @@
 
 .input {
     background-color: #1a1e2a;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
     padding: 14px 16px;
     color: #fff;
     font-size: 15px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.input::placeholder {
+    color: #4B5563;
 }
 
 .input:focus {
     border-color: #6366F1;
+    background-color: rgba(99, 102, 241, 0.04);
 }
 
 .row {
@@ -91,17 +121,35 @@
     gap: 20px;
 }
 
-.fileInputContainer {
-    border: 2px dashed rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 32px;
-    text-align: center;
-    transition: border-color 0.2s;
-    background-color: rgba(255, 255, 255, 0.02);
+.row3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
 }
 
-.fileInputContainer:hover {
-    border-color: rgba(255, 255, 255, 0.2);
+/* Image Grid */
+.imageGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.primarySlot {
+    grid-column: 1 / -1;
+    min-height: 200px;
+}
+
+.imageSlot {
+    border: 2px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    background-color: rgba(255, 255, 255, 0.02);
+    min-height: 120px;
+}
+
+.imageSlot:hover {
+    border-color: rgba(99, 102, 241, 0.3);
 }
 
 .fileInput {
@@ -113,40 +161,100 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
+    gap: 8px;
+    color: #4B5563;
+    font-size: 12px;
+    height: 100%;
+    min-height: 120px;
+    padding: 16px;
+    text-align: center;
+    transition: color 0.2s;
+}
+
+.fileLabel:hover {
     color: #9CA3AF;
-    font-size: 14px;
 }
 
 .uploadIcon {
-    font-size: 32px;
+    font-size: 24px;
     color: #6366F1;
+    opacity: 0.6;
+}
+
+.slotLabelEmpty {
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.previewWrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 120px;
 }
 
 .previewImage {
-    max-width: 100%;
-    max-height: 200px;
-    border-radius: 6px;
-    margin-top: 16px;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    min-height: 120px;
+    object-fit: cover;
+    display: block;
+}
+
+.removeBtn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    border: none;
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.removeBtn:hover {
+    background-color: rgba(239, 68, 68, 0.8);
+}
+
+.slotLabel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 16px 12px 8px;
+    letter-spacing: 0.5px;
 }
 
 .submitBtn {
     background: linear-gradient(135deg, #6b82ff, #475eff);
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 16px;
-    font-size: 16px;
-    font-weight: 600;
+    border-radius: 8px;
+    padding: 18px;
+    font-size: 15px;
+    font-weight: 700;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(71, 94, 255, 0.4);
     transition: transform 0.2s, box-shadow 0.2s;
-    margin-top: 12px;
+    margin-top: 16px;
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 10px;
+    letter-spacing: 0.5px;
 }
 
 .submitBtn:hover:not(:disabled) {
@@ -166,6 +274,49 @@
     border: 1px solid rgba(239, 68, 68, 0.3);
     color: #ef4444;
     padding: 12px 16px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 14px;
+    margin-bottom: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .formCard {
+        padding: 28px 20px;
+    }
+
+    .headerRow {
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .row, .row3 {
+        grid-template-columns: 1fr;
+    }
+
+    .imageGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .primarySlot {
+        grid-column: 1 / -1;
+    }
+
+    .title {
+        font-size: 22px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pageContainer {
+        padding: 16px 8px;
+    }
+
+    .formCard {
+        padding: 20px 16px;
+    }
+
+    .imageGrid {
+        grid-template-columns: 1fr 1fr;
+    }
 }

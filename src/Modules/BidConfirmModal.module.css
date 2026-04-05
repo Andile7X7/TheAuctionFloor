@@ -1,0 +1,281 @@
+/* Overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 24px;
+  animation: fadeIn 0.18s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Modal Card */
+.modal {
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 36px;
+  max-width: 460px;
+  width: 100%;
+  position: relative;
+  animation: slideUp 0.22s ease-out;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Close X */
+.closeX {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: #9CA3AF;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.closeX:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.gavelBadge {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #6366F1, #4F46E5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #fff;
+  margin: 0 auto 16px auto;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.5px;
+}
+
+.sub {
+  font-size: 13px;
+  color: #6B7280;
+  margin: 0;
+}
+
+/* Vehicle Banner */
+.vehicleBanner {
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.vehicleLabel {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #6366F1;
+}
+
+.vehicleName {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Bid Breakdown */
+.breakdown {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rowLabel {
+  font-size: 13px;
+  color: #9CA3AF;
+}
+
+.rowValue {
+  font-size: 14px;
+  color: #D1D5DB;
+  font-weight: 600;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.totalRow {
+  margin-top: 4px;
+  align-items: flex-end;
+}
+
+.totalLabel {
+  font-size: 13px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.totalValueGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.totalValue {
+  font-size: 24px;
+  font-weight: 900;
+  color: #6366F1;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.increaseBadge {
+  font-size: 11px;
+  color: #10B981;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Escrow Note */
+.escrowNote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+.shieldIcon {
+  color: #6366F1;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancelBtn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #9CA3AF;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: inherit;
+}
+
+.cancelBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.confirmBtn {
+  flex: 2;
+  background: linear-gradient(135deg, #6b82ff, #475eff);
+  border: none;
+  color: #fff;
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 6px 20px rgba(71, 94, 255, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  font-family: inherit;
+}
+
+.confirmBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(71, 94, 255, 0.5);
+}
+
+.confirmBtn:active {
+  transform: translateY(0);
+}
+
+.confirmBtn:focus-visible {
+  outline: 2px solid #6366F1;
+  outline-offset: 3px;
+}
+
+/* Legal Note */
+.legalNote {
+  font-size: 11px;
+  color: #4B5563;
+  text-align: center;
+  margin: 14px 0 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .modal { padding: 24px; }
+  .title { font-size: 18px; }
+  .yourBidValue { font-size: 18px; }
+  .actions { flex-direction: column; }
+  .confirmBtn { flex: none; width: 100%; }
+  .cancelBtn { flex: none; width: 100%; }
+}

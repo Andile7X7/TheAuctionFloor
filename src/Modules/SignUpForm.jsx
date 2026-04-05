@@ -12,7 +12,7 @@ import { supabase } from '../Modules/SupabaseClient'
             FirstName:'',LastName:'',email:'',password:''
         })
     
-        console.log(formData)
+
 
         function handleChange(event){
             setFormData((prevFormData)=>{
@@ -43,6 +43,20 @@ import { supabase } from '../Modules/SupabaseClient'
                 alert('check your email for verification link')
             } catch (error){
                 alert (error)
+            }
+        }
+
+        async function handleGoogleSignIn() {
+            try {
+                const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: `${window.location.origin}/auth/callback`,
+                    },
+                });
+                if (error) throw error;
+            } catch (error) {
+                alert(error.message);
             }
         }
 
@@ -80,7 +94,7 @@ import { supabase } from '../Modules/SupabaseClient'
                </form>
 
                <p id={styles.Auth}>Authentification</p>
-               <button id={styles.btnSignUpWithGoogle}> <FaGoogle id={styles.GoogleIcon}/>  SIGN UP WITH GOOGLE</button>
+               <button id={styles.btnSignUpWithGoogle} type="button" onClick={handleGoogleSignIn}> <FaGoogle id={styles.GoogleIcon}/>  SIGN UP WITH GOOGLE</button>
 
                <p id={styles.LogIn}> <span id={styles.LogInRedirect}>Already have an account?</span>  Log In</p>
             </div>

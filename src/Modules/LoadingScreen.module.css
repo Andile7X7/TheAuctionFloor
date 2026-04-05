@@ -1,7 +1,7 @@
 .wrapper {
     position: fixed;
     inset: 0;
-    background: #0b0e14;
+    background: var(--bg);
     z-index: 9999;
     display: flex;
     align-items: center;
@@ -59,7 +59,7 @@
 .logoText {
     font-size: 20px;
     font-weight: 900;
-    color: #fff;
+    color: #8B5CF6;
     letter-spacing: 2px;
     z-index: 1;
 }

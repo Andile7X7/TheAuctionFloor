@@ -1,33 +1,36 @@
-.Header{
+.Header {
     width: 100%;
     background-color: #0D1C2D;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-}
-#Logo{
-    margin-left: 5%;
-    color: #A3ABC4;
-}
-.Nav{
-    width: 30%;
-    /* border: 2px solid white; */
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-right: 5%;
+    padding: 16px 5%;
 }
-.Nav{
+
+.Brand {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #fff;
+}
+
+.Nav {
+    display: flex;
+    gap: 16px;
+    align-items: center;
     color: #D4E4FA;
 }
-#Register{
-   background-image: linear-gradient(to top right,#216DFF,#8AA8FF);
-   padding: 3%;
-   color: #FFF;
-   font-weight: 500;
-   border-radius: 0.2rem;
-   cursor: pointer;
+
+#Register {
+    background-image: linear-gradient(to top right, #216DFF, #8AA8FF);
+    padding: 8px 16px;
+    color: #FFF;
+    font-weight: 500;
+    border-radius: 0.2rem;
+    cursor: pointer;
 }
-#LogIn{
+
+#LogIn {
     cursor: pointer;
 }

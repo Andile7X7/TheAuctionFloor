@@ -1,0 +1,409 @@
+/* Profile Styles */
+.profileContainer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-bottom: 80px;
+    color: var(--text);
+}
+
+.header {
+    margin-bottom: 40px;
+}
+
+.title {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--text-h);
+    letter-spacing: -1px;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--text);
+    margin-top: 8px;
+}
+
+.contentGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 32px;
+}
+
+.card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow);
+}
+
+.cardTitle {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 24px 0;
+    color: var(--text-h);
+}
+
+/* Avatar Section */
+.avatarSection {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.avatarActions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.uploadBtn {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-h);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.uploadBtn:hover {
+    background-color: var(--bg-card);
+    border-color: var(--accent);
+}
+
+.helperText {
+    font-size: 12px;
+    color: var(--text);
+    margin: 0;
+}
+
+.standardAvatars {
+    margin-top: 16px;
+}
+
+.colorGrid {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.colorPill {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.2s;
+}
+
+.colorPill:hover {
+    transform: scale(1.1);
+}
+
+.activePill {
+    border-color: #fff;
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+/* Forms */
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.formGroup label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.formGroup input {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text-h);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.formGroup input:focus {
+    border-color: var(--accent);
+    background-color: var(--bg-surface);
+}
+
+.formRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.passwordWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.inputIcon {
+    position: absolute;
+    left: 16px;
+    color: #4B5563;
+    font-size: 14px;
+}
+
+.passwordWrap input {
+    padding-left: 44px;
+    width: 100%;
+}
+
+.saveBtn {
+    background: linear-gradient(135deg, #6b82ff, #475eff);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 12px;
+    box-shadow: 0 4px 14px rgba(71, 94, 255, 0.3);
+    transition: opacity 0.2s, transform 0.1s;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.saveBtn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(71, 94, 255, 0.5);
+}
+
+.saveBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Danger Zone */
+.cardHeaderWithIcon {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.headerIconSmall {
+    color: var(--accent);
+    font-size: 16px;
+}
+
+/* Theme Toggle */
+.themeToggleArea {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+}
+.themeButtons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+}
+.themeBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.themeBtn:hover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+.activeTheme {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+.activeTheme svg {
+    color: var(--accent);
+}
+.inputLabel {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-h);
+}
+
+.dangerCard {
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.deleteBtn {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 24px;
+    transition: all 0.2s;
+}
+
+.deleteBtn:hover {
+    background-color: #ef4444;
+    color: #fff;
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    background-color: #10B981;
+    color: #fff;
+    padding: 16px 24px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    z-index: 9999;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Modal Overlay */
+.modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 24px;
+}
+
+.modalContent {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 24px;
+    padding: 40px;
+    max-width: 500px;
+    width: 100%;
+}
+
+.modalTitle {
+    color: #ef4444;
+    margin: 0;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.modalSub {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 16px 0 32px 0;
+}
+
+.passwordConfirmArea label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+}
+
+.passwordConfirmArea input {
+    width: 100%;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 16px;
+    color: var(--text-h);
+    font-size: 16px;
+    outline: none;
+    box-sizing: border-box;
+    margin-bottom: 32px;
+}
+
+.modalActions {
+    display: flex;
+    gap: 16px;
+}
+
+.modalCancel {
+    flex: 1;
+    background-color: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text);
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.modalConfirm {
+    flex: 1;
+    background-color: #ef4444;
+    border: none;
+    color: #fff;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.spin {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    .contentGrid {
+        grid-template-columns: 1fr;
+    }
+    .formRow {
+        grid-template-columns: 1fr;
+    }
+}

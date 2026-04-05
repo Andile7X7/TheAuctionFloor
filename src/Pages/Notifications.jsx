@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import DashboardLayout from '../Modules/DashboardLayout';
 import styles from './Notifications.module.css';
-import { FaBell, FaCheck, FaTrash, FaCircle, FaGavel, FaHeart, FaComment, FaBookmark } from 'react-icons/fa';
+import { FaBell, FaCheck, FaTrash, FaCircle, FaGavel, FaFire, FaComment, FaBookmark, FaChevronRight } from 'react-icons/fa';
 
 const Notifications = () => {
     const [notifications, setNotifications] = useState([]);
@@ -22,7 +22,7 @@ const Notifications = () => {
 
             const { data, error } = await supabase
                 .from('notifications')
-                .select('*')
+                .select('*, listings(ImageURL)')
                 .eq('recipient_id', user.id)
                 .order('created_at', { ascending: false });
 
@@ -91,7 +91,7 @@ const Notifications = () => {
     const getIcon = (type) => {
         switch (type) {
             case 'bid': return <FaGavel className={styles.bidIcon} />;
-            case 'like': return <FaHeart className={styles.likeIcon} />;
+            case 'like': return <FaFire className={styles.likeIcon} />;
             case 'comment': return <FaComment className={styles.commentIcon} />;
             case 'bookmark': return <FaBookmark className={styles.bookmarkIcon} />;
             default: return <FaBell />;
@@ -123,8 +123,11 @@ const Notifications = () => {
                         {notifications.map((n) => (
                             <div 
                                 key={n.id} 
-                                className={`${styles.notificationItem} ${!n.is_read ? styles.unread : ''}`}
-                                onClick={() => markAsRead(n.id)}
+                                className={`${styles.notificationItem} ${!n.is_read ? styles.unread : ''} ${n.link_url ? styles.clickable : ''}`}
+                                onClick={() => {
+                                    markAsRead(n.id);
+                                    if (n.link_url) navigate(n.link_url);
+                                }}
                             >
                                 <div className={styles.iconArea}>
                                     {getIcon(n.type)}
@@ -133,9 +136,24 @@ const Notifications = () => {
                                     <div className={styles.messageText}>
                                         {n.message}
                                     </div>
-                                    <span className={styles.timestamp}>
-                                        {new Date(n.created_at).toLocaleDateString()} at {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
+                                    <div className={styles.meta}>
+                                        <span className={styles.timestamp}>
+                                            {new Date(n.created_at).toLocaleDateString()} at {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        {n.link_url && (
+                                            <button 
+                                                className={styles.viewBtn} 
+                                                onClick={(e) => { e.stopPropagation(); markAsRead(n.id); navigate(n.link_url); }}
+                                            >
+                                                View Listing <FaChevronRight />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {n.listings?.ImageURL && (
+                                        <div style={{marginLeft: '16px'}}>
+                                            <img src={n.listings.ImageURL} alt="Car" style={{width: '60px', height: '40px', objectFit: 'cover', borderRadius: '4px'}} />
+                                        </div>
+                                    )}
                                 </div>
                                 <div className={styles.actions}>
                                     {!n.is_read && <FaCircle className={styles.unreadDot} />}

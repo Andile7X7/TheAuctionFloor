@@ -1,25 +1,31 @@
 .dashboardContainer {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     width: 100vw;
-    background-color: #0e111a;
-    color: #F9FAFB;
+    background-color: var(--bg);
+    color: var(--text);
     font-family: 'Inter', system-ui, sans-serif;
     overflow: hidden;
-    /* Resetting any global alignments */
     text-align: left;
 }
 
-/* SIDEBAR STYLES */
+.dashboardMain {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar Styles - Adapted for the new main container */
 .sidebar {
     width: 280px;
-    background-color: #0b0e14;
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    background-color: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    padding: 24px 0;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 24px 0;
 }
 
 .brand {
@@ -30,7 +36,7 @@
     font-size: 20px;
     font-weight: 700;
     margin: 0;
-    color: #fff;
+    color: var(--text-h);
     letter-spacing: -0.5px;
 }
 
@@ -57,7 +63,7 @@
     gap: 12px;
     padding: 10px 16px;
     border-radius: 8px;
-    color: #9CA3AF;
+    color: var(--text);
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -66,13 +72,14 @@
 }
 
 .navItem:hover {
-    color: #F9FAFB;
+    color: var(--text-h);
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .navItem.active {
-    background-color: #1a1e2a;
-    color: #fff;
-    border-left: 3px solid #6366F1;
+    background-color: var(--accent-bg);
+    color: var(--text-h);
+    border-left: 3px solid var(--accent);
     border-radius: 0 8px 8px 0;
 }
 
@@ -87,169 +94,21 @@
 
 .listVehicleBtn {
     width: 100%;
-    background: linear-gradient(135deg, #6b82ff, #475eff);
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 12px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(71, 94, 255, 0.4);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .listVehicleBtn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(71, 94, 255, 0.6);
-}
-
-/* MAIN CONTENT STYLES */
-.mainContent {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    position: relative;
-}
-
-.header {
-    height: 72px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 40px;
-    box-sizing: border-box;
-    flex-shrink: 0;
-}
-
-.searchBar {
-    display: flex;
-    align-items: center;
-    background-color: #151923;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    padding: 8px 16px;
-    width: 320px;
-}
-
-.searchBar input {
-    background: transparent;
-    border: none;
-    color: #fff;
-    width: 100%;
-    margin-left: 10px;
-    font-size: 14px;
-    outline: none;
-}
-
-.searchBar input::placeholder {
-    color: #6b7280;
-}
-
-.searchIcon {
-    color: #6b7280;
-    font-size: 14px;
-}
-
-.headerRight {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.headerIcon {
-    color: #F9FAFB;
-    cursor: pointer;
-    font-size: 18px;
-}
-
-.profileInfo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 12px;
-    background-color: rgba(255, 255, 255, 0.05);
-    border-radius: 20px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    position: relative;
-}
-
-.profileInfo:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.profileName {
-    font-size: 13px;
-    color: #fff;
-    font-weight: 600;
-}
-
-.profileAvatar {
-    width: 32px;
-    height: 32px;
-    background-color: #6366F1;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-weight: 700;
-    font-size: 14px;
-}
-
-/* Dropdown Menu Styles */
-.dropdownMenu {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
-    background-color: #121620;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    width: 180px;
-    padding: 8px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    z-index: 2000;
-    backdrop-filter: blur(10px);
-    animation: fadeInDown 0.2s ease-out;
-}
-
-.dropdownItem {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    padding: 10px 12px;
-    color: #9CA3AF;
-    border-radius: 8px;
-    transition: all 0.2s;
-}
-
-.dropdownItem:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    color: #fff;
-}
-
-.dropdownDivider {
-    height: 1px;
-    background-color: rgba(255, 255, 255, 0.05);
-    margin: 8px 0;
-}
-
-.logoutItem {
-    color: #ef4444;
-}
-
-.logoutItem:hover {
-    background-color: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-}
-
-@keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
 }
 
 .scrollableArea {
@@ -259,35 +118,7 @@
     box-sizing: border-box;
 }
 
-/* MOBILE REFINEMENTS */
-
-.menuToggle {
-    display: none;
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 8px;
-    margin-right: 16px;
-}
-
-.closeSidebar {
-    display: none;
-    background: none;
-    border: none;
-    color: #9ca3af;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 8px;
-}
-
-.sidebarHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
+/* Sidebar Overlay & Mobile Toggle */
 .sidebarOverlay {
     display: none;
     position: fixed;
@@ -304,9 +135,14 @@
     display: block;
 }
 
-.headerLeftMobile {
-    display: flex;
-    align-items: center;
+.closeSidebar {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 8px;
 }
 
 @media (max-width: 1024px) {
@@ -315,7 +151,7 @@
         left: 0;
         top: 0;
         bottom: 0;
-        z-index: 1000;
+        z-index: 2001; /* Above UniversalHeader mobile menu if needed */
         transform: translateX(-100%);
         width: 280px;
     }
@@ -323,13 +159,13 @@
     .sidebarOpen {
         transform: translateX(0);
     }
-
-    .menuToggle, .closeSidebar {
-        display: block;
+    
+    .sidebarOverlay {
+        z-index: 2000;
     }
 
-    .header {
-        padding: 0 24px;
+    .closeSidebar {
+        display: block;
     }
 
     .scrollableArea {
@@ -337,41 +173,11 @@
     }
 }
 
-@media (max-width: 768px) {
-    .searchBar {
-        width: 100%;
-        max-width: 240px;
-    }
-
-    .profileName {
-        display: none;
-    }
-
-    .profileInfo {
-        padding-left: 0;
-        border-left: none;
-    }
-}
-
 @media (max-width: 480px) {
-    .sidebar {
-        width: 100%;
-    }
-
-    .header {
-        padding: 0 16px;
-        height: 64px;
-    }
-
-    .searchBar {
-        max-width: 160px;
-    }
-
-    .headerRight {
-        gap: 12px;
-    }
-
     .scrollableArea {
         padding: 16px;
+    }
+    .sidebar {
+        width: 100%;
     }
 }

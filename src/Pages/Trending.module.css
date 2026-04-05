@@ -1,0 +1,290 @@
+.trendingPage {
+  background-color: var(--bg);
+  min-height: 100vh;
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease;
+}
+
+.header {
+  height: 80px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  background-color: var(--bg-surface);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  cursor: pointer;
+}
+
+.navLinks {
+  display: flex;
+  gap: 32px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.navLinks span {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.navLinks span:hover {
+  color: var(--text-h);
+}
+
+.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 28px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar {
+  background-color: #6366F1;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+.mainContainer {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 60px 48px;
+}
+
+.pageTitle {
+  font-size: 48px;
+  font-weight: 900;
+  margin: 0 0 16px 0;
+  letter-spacing: -1.5px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pageSubtitle {
+  color: #9CA3AF;
+  font-size: 16px;
+  max-width: 600px;
+  line-height: 1.6;
+  margin-bottom: 64px;
+}
+
+.section {
+  margin-bottom: 80px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.intenseIcon { color: #f97316; }
+.highIcon { color: #3b82f6; }
+.popularIcon { color: #ec4899; }
+
+.pulseDot {
+  width: 12px;
+  height: 12px;
+  background-color: #f97316;
+  border-radius: 50%;
+  animation: pulseIntense 2s infinite;
+}
+
+@keyframes pulseIntense {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(249, 115, 22, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+}
+
+.emptyState {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 48px;
+  text-align: center;
+}
+
+.emptyState h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #D1D5DB;
+}
+
+.emptyState p {
+  color: #6B7280;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Base Card Layout */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.trendingCard {
+  display: flex;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+  height: 140px;
+}
+
+.trendingCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.cardLeft {
+  width: 140px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.cardImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cardRight {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-grow: 1;
+}
+
+.carName {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.5px;
+}
+
+.carPrice {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-h);
+}
+
+.metricBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  width: fit-content;
+  text-transform: uppercase;
+}
+
+/* Intense Tiers Styles */
+.cardIntense {
+  background: linear-gradient(to right, #121620, rgba(234, 88, 12, 0.05));
+  border: 1px solid rgba(234, 88, 12, 0.3);
+  box-shadow: 0 0 20px rgba(234, 88, 12, 0.1) inset;
+  animation: borderGlow 3s infinite alternate;
+}
+
+.cardIntense:hover {
+  border-color: rgba(234, 88, 12, 0.6);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(234, 88, 12, 0.2) inset;
+}
+
+@keyframes borderGlow {
+  to { border-color: rgba(234, 88, 12, 0.6); box-shadow: 0 0 30px rgba(234, 88, 12, 0.15) inset; }
+}
+
+.metricIntense {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(234, 88, 12, 0.4);
+}
+
+/* High Tier Styles */
+.cardHigh {
+  background: linear-gradient(to right, #121620, rgba(59, 130, 246, 0.03));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.cardHigh:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.metricHigh {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Popular Tier Styles */
+.cardPopular {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.metricPopular {
+  background: rgba(236, 72, 153, 0.1);
+  color: #f472b6;
+  border: 1px solid rgba(236, 72, 153, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header { padding: 0 24px; }
+  .navLinks { display: none; }
+  .grid { grid-template-columns: 1fr; }
+  .mainContainer { padding: 40px 24px; }
+  .trendingCard { height: 120px; }
+  .cardLeft { width: 120px; }
+  .pageTitle { font-size: 28px; }
+}

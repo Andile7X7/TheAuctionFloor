@@ -1,114 +1,141 @@
 
-.FormContainer{
-/*  */
-width: 100%;
-height: 850px;
-background-color: #0D1C2D;
-
+.FormContainer {
+    width: 100%;
+    min-height: 850px;
+    background-color: #0D1C2D;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
-.form{
-    /* border: 2px solid black; */
+
+.form {
     width: 90%;
     max-width: 400px;
-    margin: auto auto;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     background-color: #0D1C2D;
     color: #8392A6;
 }
-.FormSection{
+
+.FormSection {
     display: flex;
     flex-direction: column;
     margin-bottom: 5%;
 }
-.FormSection Label{
+
+.FormSection Label {
     text-align: left;
     font-size: large;
     margin: 1%;
 }
-.FormSection input{
-    height: 50px ;
+
+.FormSection input {
+    height: 50px;
     background-color: #39485A;
     border: none;
     font-size: xx-large;
-    color: #8392A6 ;
+    color: #8392A6;
 }
-.BtnSubmit{
+
+.BtnSubmit {
     width: 100%;
     height: 60px;
     margin: 5% auto;
-    background-image: linear-gradient(to top right,#216DFF,#8AA8FF);
+    background-image: linear-gradient(to top right, #216DFF, #8AA8FF);
     border: none;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 4px;
 }
-#SignUpText{
+
+#SignUpText {
     font-size: xx-large;
     font-weight: 700;
-    margin: 2%;
+    margin: 16px 0 4px;
     color: #D4E4FA;
+    text-align: center;
+    width: 100%;
 }
-#SignUpSubText{
+
+#SignUpSubText {
     font-size: medium;
     font-weight: 200;
-    margin: 1%;
-    color: #8392A6 ;
+    margin: 4px 0 24px;
+    color: #8392A6;
+    text-align: center;
+    width: 100%;
 }
-#Auth{
-    margin: 5%;
+
+#Auth {
+    margin: 24px 0;
     color: #FFDBD0;
-    position: relative;
     font-weight: 100;
-}
-#Auth::after{
-    content: '';
-    position: absolute;
-    width: 25%;
-    height: 5%;
-    top: 50%;
-    left: 10%;
-    background-color: #FFDBD0;
-}
-#Auth::before{
-    content: '';
-    position: absolute;
-    width: 25%;
-    height: 5%;
-    top: 50%;
-    right: 10%;
-    background-color: #FFDBD0;
-}
-#btnSignUpWithGoogle{
+    text-align: center;
     width: 90%;
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+#Auth::before,
+#Auth::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: #FFDBD0;
+}
+
+#btnSignUpWithGoogle {
+    width: 90%;
+    max-width: 400px;
     height: 60px;
     background-color: transparent;
-    border: 1px solid #A3ABC4 ;
+    border: 1px solid #A3ABC4;
     color: #A3ABC4;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
-#GoogleIcon{
-    margin-right: 5%;
-    size: 80;
+
+#GoogleIcon {
+    font-size: 18px;
 }
-#LogInRedirect{
+
+#LogInRedirect {
     color: #FFDBD0;
     font-weight: 100;
 }
-#LogIn{
-    margin: 5%;
+
+#LogIn {
+    margin: 24px 0;
     color: #A3ABC4;
     cursor: pointer;
+    text-align: center;
 }
-@media (min-width:700px){
-    
-    .Wrapper{
+
+@media (min-width: 700px) {
+    .Wrapper {
         background-image: url('/src/assets/screen.png');
         background-position: center;
         background-size: cover;
-
         width: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
     }
-    .FormContainer{
+
+    .FormContainer {
         width: 50%;
     }
 }
