@@ -16,10 +16,11 @@ import AddListing from './Pages/AddListing';
 import MyListings from './Pages/MyListings';
 import ListingDetail from './Pages/ListingDetail';
 import ActivityTracking from './Pages/ActivityTracking';
-import LiveFeed from './Pages/LiveFeed';
+import PersonalizedFeed from './Pages/PersonalizedFeed';
 import Trending from './Pages/Trending';
 import Profile from './Pages/Profile';
 import AuthCallback from './Pages/AuthCallback';
+import SecureRoute from './Modules/SecureRoute';
 
 function App() {
   return (
@@ -27,18 +28,81 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/auction-floor" element={<AuctionFloor />} />
       <Route path="/signup" element={<SignUpPage />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/profile" element={<Profile />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/new-listing" element={<AddListing />} />
       <Route path="/my-listings" element={<MyListings />} />
       <Route path="/listing/:id" element={<ListingDetail />} />
-      <Route path="/dashboard/activity" element={<ActivityTracking />} />
-      <Route path="/dashboard/notifications" element={<Notifications />} />
-      <Route path="/live-feed" element={<LiveFeed />} />
+      <Route 
+        path="/personalized-feed" 
+        element={
+          <SecureRoute>
+            <PersonalizedFeed />
+          </SecureRoute>
+        } 
+      />
       <Route path="/trending" element={<Trending />} />
       <Route path="*" element={<Home />} />
+
+      <Route 
+        path="/dashboard/notifications" 
+        element={
+          <SecureRoute>
+            <Notifications />
+          </SecureRoute>
+        } 
+      />
+
+      <Route 
+        path="/dashboard/activity" 
+        element={
+          <SecureRoute>
+            <ActivityTracking />
+          </SecureRoute>
+        } 
+      />
+
+
+       <Route 
+        path="/dashboard" 
+        element={
+          <SecureRoute>
+            <Dashboard />
+          </SecureRoute>
+        } 
+      />
+      <Route 
+        path="/add-listing" 
+        element={
+          <SecureRoute>
+            <AddListing />
+          </SecureRoute>
+        } 
+      />
+      <Route 
+        path="/my-listings" 
+        element={
+          <SecureRoute>
+            <MyListings />
+          </SecureRoute>
+        } 
+      />
+
+            <Route 
+        path="/profile" 
+        element={
+          <SecureRoute>
+            <Profile />
+          </SecureRoute>
+        } 
+      />
+
+
+
     </Routes>
+     
+    
+
+
   )
 }
 

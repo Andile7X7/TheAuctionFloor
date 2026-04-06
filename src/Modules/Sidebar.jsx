@@ -47,7 +47,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         </nav>
 
         <div className={styles.sidebarBottom}>
-          <button onClick={() => navigate('/new-listing')} className={styles.listVehicleBtn}>Publish My Luxury Car</button>
+          <button onClick={() => navigate('/add-listing')} className={styles.listVehicleBtn}>Publish My Luxury Car</button>
         </div>
       </aside>
     </>

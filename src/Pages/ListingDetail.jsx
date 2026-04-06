@@ -11,6 +11,15 @@ import BidConfirmModal from '../Modules/BidConfirmModal';
 import NotificationBell from '../Modules/NotificationBell';
 import UserAvatar from '../Modules/UserAvatar';
 
+import { 
+  sanitizeBidAmount, 
+  sanitizeBidMetadata, 
+  checkBidRateLimit,
+  getDynamicMinBid,
+  formatZAR 
+} from '../utils/bidValidation';
+import { getCurrentUser, withAuth } from '../utils/authSecurity';
+
 const CommentNode = ({ comment, handleReply, handleLike, handleDelete, currentUserId, listingOwnerId, styles }) => {
   return (
     <div className={styles.comment}>
@@ -80,6 +89,7 @@ const ListingDetail = () => {
   const [bidConfirm, setBidConfirm] = useState(null);
   const [showBidModal, setShowBidModal] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [timeRemainingObj, setTimeRemainingObj] = useState(null);
   
   // Comments collapse state
   const [commentsExpanded, setCommentsExpanded] = useState(false);
@@ -118,8 +128,8 @@ const ListingDetail = () => {
         console.error(error);
       } else {
         setListing(data);
-        // Pre-fill input block slightly above current price
-        const nextIncrement = (data.CurrentPrice || data.StartingPrice || 0) + 1000;
+        const dynamicInc = getDynamicMinBid(data.CurrentPrice || data.StartingPrice || 0);
+        const nextIncrement = (data.CurrentPrice || data.StartingPrice || 0) + dynamicInc;
         setBidAmount(nextIncrement.toString());
       }
 
@@ -264,6 +274,29 @@ const ListingDetail = () => {
       supabase.removeChannel(bidSub);
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!listing?.closes_at) return;
+    
+    const updateTime = () => {
+      const diff = new Date(listing.closes_at) - new Date();
+      if (diff <= 0) {
+        setTimeRemainingObj({ closed: true });
+        return;
+      }
+      
+      const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const m = String(Math.floor((diff / 1000 / 60) % 60)).padStart(2, '0');
+      const s = String(Math.floor((diff / 1000) % 60)).padStart(2, '0');
+      
+      setTimeRemainingObj({ closed: false, d, h, m, s });
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [listing?.closes_at]);
 
   const toggleBookmark = async () => {
     if (!user) return showAuthPrompt('Log in to save this vehicle to your watchlist.');
@@ -486,88 +519,148 @@ const ListingDetail = () => {
     }
   };
 
-  // Step 1: validate inputs and show confirmation modal
-  const handlePlaceBid = () => {
-    if (!user) {
-      showAuthPrompt('You need to be logged in to place a bid on this vehicle.');
-      return;
-    }
-    if (isOwner) {
-      setBidError('You cannot bid on your own listing.');
-      return;
-    }
-    const proposedBid = parseFloat(bidAmount);
-    const currentHighest = listing.CurrentPrice || listing.StartingPrice || 0;
-    if (isNaN(proposedBid) || proposedBid <= currentHighest) {
-      setBidError(`Minimum bid must exceed ${formatZAR(currentHighest)}`);
-      return;
-    }
-    setBidError('');
-    setShowBidModal(true);
-  };
+  const handleBidInput = (e) => {
+    const rawValue = e.target.value;
+  
+  // Strip non-numeric (except single decimal)
+  const cleaned = rawValue
+    .replace(/[^\d.]/g, '')           // Remove non-numeric
+    .replace(/(\..*)\./g, '$1')      // Prevent multiple decimals
+    .replace(/^0+(?=\d)/, '');        // Remove leading zeros
+  
+  setBidAmount(cleaned);
+  if (bidError) setBidError('');
+};
+const handlePlaceBid = () => {
+  // Clear previous errors
+  setBidError('');
 
-  // Step 2: user confirmed — actually submit the bid
-  const submitBid = async () => {
-    const proposedBid = parseFloat(bidAmount);
-    setShowBidModal(false);
-    setBidding(true);
-    try {
-      // ─── 1. Find the previous highest bidder BEFORE we update (for notification) ───
-      const { data: prevBidData } = await supabase
-        .from('bid_history')
-        .select('userid, amount')
-        .eq('listing_id', parseInt(id, 10))
-        .order('amount', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  // Check authentication using secure utility
+  if (!user) {
+    showAuthPrompt('You need to be logged in to place a bid on this vehicle.');
+    return;
+  }
 
-      const prevLeaderId = prevBidData?.userid ?? null;
+  // Prevent self-bidding
+  if (isOwner) {
+    setBidError('You cannot bid on your own listing.');
+    return;
+  }
 
-      // ─── 2. SAFE BIDDING VIA RPC (Transactional) ───
-      const { error: rpcError } = await supabase.rpc('place_bid', {
-        p_listing_id: parseInt(id),
-        p_bid_amount: proposedBid,
-        p_user_id: user.id
-      });
+  // Prevent bidding if ended
+  if (timeRemainingObj?.closed) {
+    setBidError('Auction has closed.');
+    return;
+  }
 
-      if (rpcError) throw new Error(rpcError.message);
+  // ⬇️⬇️⬇️ REPLACE parseFloat WITH UTILITY ⬇️⬇️⬇️
+  const currentHighest = listing.CurrentPrice || listing.StartingPrice || 0;
+  
+  const validation = sanitizeBidAmount(bidAmount, currentHighest);
+  
+  if (!validation.valid) {
+    setBidError(validation.error);
+    return;
+  }
+  // ⬆️⬆️⬆️ REPLACE parseFloat WITH UTILITY ⬆️⬆️⬆️
 
-      // ─── 3. Successful Bid! Notify previous leader & show confirmation ───
-      setBidConfirm({ amount: proposedBid, listingName: `${listing.Make} ${listing.Model}` });
-      setBidAmount('');
+  // Store validated amount for modal (optional: store in state if needed)
+  setBidError('');
+  setShowBidModal(true);
+};
 
-      await supabase.from('activities').insert({
-        userid: user.id,
-        type: 'bid',
-        listing_id: parseInt(id),
-        entitytype: 'car',
-        metadata: { userName: currentUserName, carName: `${listing.Make} ${listing.Model}`, amount: proposedBid }
-      });
+// Step 2: user confirmed — actually submit the bid
+const submitBid = async () => {
+  setShowBidModal(false);
+  setBidding(true);
+  setBidError('');
 
-      if (prevLeaderId && prevLeaderId !== user.id) {
-        const vehicleName = `${listing.Make} ${listing.Model}`;
-        await supabase.from('notifications').insert({
-          recipient_id: prevLeaderId,
-          actor_id: user.id,
-          listing_id: parseInt(id),
-          type: 'outbid',
-          message: `You've been outbid on the ${vehicleName}! A new bid of ${formatZAR(proposedBid)} has been placed.`,
-          link_url: `/listing/${id}`,
-          is_read: false
-        });
-      }
-
-      // Notify Owner
-      const vehicleName = `${listing.Make} ${listing.Model}`;
-      sendNotification('bid', `placed a bid of ${formatZAR(proposedBid)} on your ${vehicleName}`);
-
-    } catch (err) {
-      setBidError(err.message);
-    } finally {
+  try {
+    // ⬇️⬇️⬇️ ADD RATE LIMITING CHECK ⬇️⬇️⬇️
+    const rateCheck = checkBidRateLimit(user.id, listing.id);
+    if (!rateCheck.allowed) {
+      setBidError(rateCheck.error);
       setBidding(false);
+      return;
     }
-  };
+    // ⬆️⬆️⬆️ ADD RATE LIMITING CHECK ⬆️⬆️⬆️
 
+    // Re-validate amount (security: don't trust client state)
+    const currentHighest = listing.CurrentPrice || listing.StartingPrice || 0;
+    const validation = sanitizeBidAmount(bidAmount, currentHighest);
+    
+    if (!validation.valid) {
+      setBidError(validation.error);
+      setBidding(false);
+      return;
+    }
+
+    const proposedBid = validation.amount; // Use sanitized amount
+
+    // ─── 1. Find the previous highest bidder BEFORE we update (for notification) ───
+    const { data: prevBidData } = await supabase
+      .from('bid_history')
+      .select('userid, amount')
+      .eq('listing_id', parseInt(id, 10))
+      .order('amount', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const prevLeaderId = prevBidData?.userid ?? null;
+
+    // ─── 2. SAFE BIDDING VIA RPC (Transactional) ───
+    const { error: rpcError } = await supabase.rpc('place_bid', {
+      p_listing_id: Number(id),           // Explicit Number — matches bigint signature
+      p_bid_amount: proposedBid,
+      p_user_id: user.id
+    });
+
+    if (rpcError) throw new Error(rpcError.message);
+
+    // ─── 3. Successful Bid! Notify previous leader & show confirmation ───
+    setBidConfirm({ 
+      amount: proposedBid, 
+      listingName: `${listing.Make} ${listing.Model}` 
+    });
+    setBidAmount(''); // Clear input
+
+    // ─── 4. Log activity ───
+    await supabase.from('activities').insert({
+      userid: user.id,
+      type: 'bid',
+      listing_id: parseInt(id),
+      entitytype: 'car',
+      metadata: { 
+        userName: currentUserName, 
+        carName: `${listing.Make} ${listing.Model}`, 
+        amount: proposedBid 
+      }
+    });
+
+    // ─── 5. Notify previous leader if outbid ───
+    if (prevLeaderId && prevLeaderId !== user.id) {
+      const vehicleName = `${listing.Make} ${listing.Model}`;
+      await supabase.from('notifications').insert({
+        recipient_id: prevLeaderId,
+        actor_id: user.id,
+        listing_id: parseInt(id),
+        type: 'outbid',
+        message: `You've been outbid on the ${vehicleName}! A new bid of ${formatZAR(proposedBid)} has been placed.`,
+        link_url: `/listing/${id}`,
+        is_read: false
+      });
+    }
+
+    // ─── 6. Notify Owner ───
+    const vehicleName = `${listing.Make} ${listing.Model}`;
+    sendNotification('bid', `placed a bid of ${formatZAR(proposedBid)} on your ${vehicleName}`);
+
+  } catch (err) {
+    setBidError(err.message);
+  } finally {
+    setBidding(false);
+  }
+};
   const formatZAR = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 }).format(amount || 0);
   };
@@ -657,12 +750,12 @@ const ListingDetail = () => {
         {/* Image Gallery */}
         <div className={styles.gallerySection}>
           <div className={styles.mainImageContainer}>
-            {listing.status === 'sold' ? (
-              <div className={styles.liveBadge} style={{ backgroundColor: '#EF4444' }}>SOLD</div>
+            {listing.status === 'sold' || timeRemainingObj?.closed ? (
+              <div className={styles.liveBadge} style={{ backgroundColor: '#EF4444' }}>CLOSED</div>
             ) : (
               <div className={styles.liveBadge}><div className={styles.dot}></div> LIVE AUCTION</div>
             )}
-            <img src={allImages[activeImageIndex]} alt={listing.Model} className={styles.mainImage} style={{ filter: listing.status === 'sold' ? 'grayscale(80%) brightness(0.7)' : 'none' }} />
+            <img src={allImages[activeImageIndex]} alt={listing.Model} className={styles.mainImage} style={{ filter: listing.status === 'sold' || timeRemainingObj?.closed ? 'grayscale(80%) brightness(0.7)' : 'none' }} />
             {allImages.length > 1 && (
               <>
                 <button className={`${styles.galleryNav} ${styles.galleryNavLeft}`} onClick={goToPrev}><FaChevronLeft /></button>
@@ -717,36 +810,48 @@ const ListingDetail = () => {
               <div className={styles.bidLabelGroup}>
                 <span className={styles.bidLabel}>Current Bid</span>
                 <h3 className={styles.bidAmount}>{formatZAR(listing.CurrentPrice || listing.StartingPrice)}</h3>
+                {listing.ReservePrice > 0 && (
+                  <span style={{fontSize: '12px', fontWeight: 'bold', marginTop: '4px', display: 'inline-block', color: listing.CurrentPrice >= listing.ReservePrice ? '#10B981' : '#F59E0B'}}>
+                    {listing.CurrentPrice >= listing.ReservePrice ? '✓ Reserve Met' : '⚠ Reserve Not Met'}
+                  </span>
+                )}
               </div>
               <div className={styles.bidLabelGroup} style={{textAlign: 'right'}}>
                 <span className={styles.bidLabel}>Time Left</span>
-                <span className={styles.timeLeft}>04d : 12h : 22m</span>
+                {timeRemainingObj?.closed ? (
+                  <span className={styles.timeLeft} style={{color: '#EF4444'}}>Closed</span>
+                ) : timeRemainingObj ? (
+                  <span className={styles.timeLeft}>
+                    {timeRemainingObj.d}d : {timeRemainingObj.h}h : {timeRemainingObj.m}m : {timeRemainingObj.s}s
+                  </span>
+                ) : (
+                  <span className={styles.timeLeft}>Calculating...</span>
+                )}
               </div>
             </div>
 
             <div className={styles.bidInputArea}>
               <span className={styles.maxBidLabel}>
-                {listing.status === 'sold' ? 'Auction Closed' : isOwner ? 'Your Showroom Listing' : 'Enter Your Max Bid'}
+                {listing.status === 'sold' || timeRemainingObj?.closed ? 'Auction Closed' : isOwner ? 'Your Showroom Listing' : 'Enter Your Max Bid'}
               </span>
               <div className={styles.bidInputWrap}>
                 <span className={styles.currencySymbol}>R</span>
-                <input 
-                  type="number" 
-                  className={styles.bidInput} 
+               <input
                   value={bidAmount}
-                  disabled={isOwner || bidding || listing.status === 'sold'}
-                  placeholder={isOwner || listing.status === 'sold' ? '—' : ''}
-                  onChange={(e) => {
-                    setBidAmount(e.target.value);
-                    if (bidError) setBidError('');
-                  }}
+                  onChange={handleBidInput}
+                  type="text"                    // Not number (prevents spinners)
+                  inputMode="decimal"            // Mobile numeric keyboard
+                  pattern="^\d+(\.\d{1,2})?$"    // HTML5 validation
+                  maxLength={12}
+                  autoComplete="off"
+                  placeholder="0.00"
                 />
               </div>
               {bidError && <div className={styles.bidErrorMsg}>{bidError}</div>}
               
-              {listing.status === 'sold' ? (
+              {listing.status === 'sold' || timeRemainingObj?.closed ? (
                 <div className={styles.ownerNotice} style={{ color: '#EF4444' }}>
-                  Bidding has concluded. This vehicle has been marked as SOLD.
+                  Bidding has concluded. This vehicle's auction has closed.
                 </div>
               ) : isOwner ? (
                 <div className={styles.ownerNotice}>

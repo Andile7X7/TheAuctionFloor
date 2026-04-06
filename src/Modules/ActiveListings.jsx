@@ -11,9 +11,24 @@ const ActiveListings = ({ listings = [] }) => {
 
   return (
     <div>
-      <h3 className={styles.sectionTitle}>
+      <h3 className={styles.sectionTitle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         My Active Listings
-        <span className={styles.viewAll}>View All &gt;</span>
+        <button
+          onClick={() => navigate('/add-listing')}
+          style={{
+            background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '8px 14px',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            letterSpacing: '0.5px'
+          }}
+        >
+          + List New Vehicle
+        </button>
       </h3>
       <div className={styles.flexColList}>
         {listings.length === 0 && (

@@ -24,8 +24,8 @@ const BidConfirmModal = ({ amount, currentPrice, listingName, vehicle, onConfirm
     ? ((increase / currentPrice) * 100).toFixed(1)
     : null;
 
-  // Buyer's Premium calculation (e.g., 5% capped at R15,000)
-  const buyersPremium = Math.min(amount * 0.05, 15000);
+  // Buyer's Premium calculation (1% or Min R1000)
+  const buyersPremium = Math.max(amount * 0.01, 1000);
   const totalCommitment = amount + buyersPremium;
 
   return (
@@ -59,7 +59,7 @@ const BidConfirmModal = ({ amount, currentPrice, listingName, vehicle, onConfirm
             <span className={styles.rowValue}>{formatZAR(amount)}</span>
           </div>
           <div className={styles.row}>
-            <span className={styles.rowLabel}>Buyer's Premium (5%)</span>
+            <span className={styles.rowLabel}>Commission Fee (1% or Min R1k)</span>
             <span className={styles.rowValue}>{formatZAR(buyersPremium)}</span>
           </div>
           <div className={styles.divider} />

@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import styles from './AddListing.module.css';
 import UniversalHeader from '../Modules/UniversalHeader';
 import { FaArrowLeft, FaCloudUploadAlt, FaSpinner, FaTimes } from 'react-icons/fa';
+// ⬇️⬇️⬇️ IMPORT IMAGE SECURITY UTILITIES ⬇️⬇️⬇️
+import { 
+  validateMultipleImages, 
+  createSecurePreview, 
+  revokePreview 
+} from '../utils/imageSecurity';
+import { getCurrentUser } from '../utils/authSecurity';
+// ⬆️⬆️⬆️ IMPORT IMAGE SECURITY UTILITIES ⬆️⬆️⬆️
 
 const AddListing = () => {
   const navigate = useNavigate();
@@ -14,90 +22,168 @@ const AddListing = () => {
     Make: '',
     Model: '',
     Year: '',
-    StartingPrice: '',
+    ReservePrice: '',
     mileage: '',
     transmission: '',
     engine: '',
     location: ''
   });
   
-  // Support up to 8 images (ImageURL + image2URL through image8URL)
-  const [imageFiles, setImageFiles] = useState([null, null, null, null, null, null, null, null]);
-  const [previewUrls, setPreviewUrls] = useState([null, null, null, null, null, null, null, null]);
+  // Support up to 8 images with validation state
+  const [imageFiles, setImageFiles] = useState(Array(8).fill(null));
+  const [previewUrls, setPreviewUrls] = useState(Array(8).fill(null));
+  const [imageErrors, setImageErrors] = useState({}); // Track validation errors per slot
+
+  // ⬇️⬇️⬇️ CLEANUP PREVIEWS ON UNMOUNT ⬇️⬇️⬇️
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => {
+        if (url) revokePreview(url);
+      });
+    };
+  }, []);
+  // ⬆️⬆️⬆️ CLEANUP PREVIEWS ON UNMOUNT ⬆️⬆️⬆️
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (index, e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setImageFiles(prev => {
-        const updated = [...prev];
-        updated[index] = file;
-        return updated;
-      });
-      setPreviewUrls(prev => {
-        const updated = [...prev];
-        updated[index] = URL.createObjectURL(file);
-        return updated;
-      });
-    }
-  };
+  // ⬇️⬇️⬇️ REPLACE handleFileChange WITH SECURE VERSION ⬇️⬇️⬇️
+  const handleFileChange = useCallback(async (index, e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    
+    // Clear previous error for this slot
+    setImageErrors(prev => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
 
-  const removeImage = (index) => {
+    // Validate using security utility
+    const validation = await validateMultipleImages([file]);
+    
+    if (!validation.valid) {
+      setImageErrors(prev => ({ ...prev, [index]: validation.error }));
+      // Reset file input
+      e.target.value = '';
+      return;
+    }
+
+    const imageData = validation.images[0];
+
+    // Revoke old preview to prevent memory leak
+    if (previewUrls[index]) {
+      revokePreview(previewUrls[index]);
+    }
+
+    // Create secure preview
+    const securePreviewUrl = createSecurePreview(file);
+
+    // Store validated image data
+    setImageFiles(prev => {
+      const updated = [...prev];
+      updated[index] = {
+        file: file,
+        sanitizedName: imageData.sanitizedName,
+        dimensions: imageData.dimensions,
+        validated: true
+      };
+      return updated;
+    });
+
+    setPreviewUrls(prev => {
+      const updated = [...prev];
+      updated[index] = securePreviewUrl;
+      return updated;
+    });
+  }, [previewUrls]);
+  // ⬆️⬆️⬆️ REPLACE handleFileChange WITH SECURE VERSION ⬆️⬆️⬆️
+
+  // ⬇️⬇️⬇️ REPLACE removeImage WITH SECURE VERSION ⬇️⬇️⬇️
+  const removeImage = useCallback((index) => {
+    // Revoke preview URL to free memory
+    if (previewUrls[index]) {
+      revokePreview(previewUrls[index]);
+    }
+
     setImageFiles(prev => {
       const updated = [...prev];
       updated[index] = null;
       return updated;
     });
+
     setPreviewUrls(prev => {
       const updated = [...prev];
-      if (updated[index]) URL.revokeObjectURL(updated[index]);
       updated[index] = null;
       return updated;
     });
-  };
 
-  const uploadImage = async (file, userId) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    // Clear error for this slot
+    setImageErrors(prev => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
+  }, [previewUrls]);
+  // ⬆️⬆️⬆️ REPLACE removeImage WITH SECURE VERSION ⬆️⬆️⬆️
+
+  // ⬇️⬇️⬇️ REPLACE uploadImage WITH SECURE VERSION ⬇️⬇️⬇️
+  const uploadImage = useCallback(async (imageData, userId, index) => {
+    if (!imageData || !imageData.validated) {
+      throw new Error(`Image ${index + 1} failed validation`);
+    }
+
+    // Use sanitized filename from validation
+    const filePath = `${userId}/${Date.now()}_${imageData.sanitizedName}`;
     
     const { error: uploadError } = await supabase.storage
       .from('Images')
-      .upload(fileName, file, {
+      .upload(filePath, imageData.file, {
         cacheControl: '3600',
-        upsert: false
+        upsert: false,
+        contentType: imageData.file.type // Explicitly set content type
       });
 
-    if (uploadError) throw new Error(`Image Upload Failed: ${uploadError.message}`);
+    if (uploadError) throw new Error(`Image ${index + 1} Upload Failed: ${uploadError.message}`);
 
+    // Get signed URL with transformation parameters
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from('Images')
-      .createSignedUrl(fileName, 60 * 60 * 24 * 365 * 10);
+      .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
       
     if (signedUrlError) throw new Error(`URL Generation Failed: ${signedUrlError.message}`);
       
     return signedUrlData.signedUrl;
-  };
+  }, []);
+  // ⬆️⬆️⬆️ REPLACE uploadImage WITH SECURE VERSION ⬆️⬆️⬆️
 
-  const handleSubmit = async (e) => {
+  // ⬇️⬇️⬇️ REPLACE handleSubmit WITH SECURE VERSION ⬇️⬇️⬇️
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setLoading(true);
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error("You must be logged in to create a listing.");
+      // Use secure user getter
+      const user = await getCurrentUser();
+      if (!user) throw new Error("You must be logged in to create a listing.");
+
+      // Check for any image validation errors
+      const hasImageErrors = Object.keys(imageErrors).length > 0;
+      if (hasImageErrors) {
+        throw new Error("Please fix image errors before submitting.");
+      }
 
       if (!imageFiles[0]) throw new Error("Please upload at least the primary vehicle image.");
 
-      // Upload all provided images
+      // Upload all provided images using validated data
       const imageUrls = {};
       for (let i = 0; i < imageFiles.length; i++) {
         if (imageFiles[i]) {
-          const url = await uploadImage(imageFiles[i], user.id);
+          const url = await uploadImage(imageFiles[i], user.id, i);
           if (i === 0) {
             imageUrls.ImageURL = url;
           } else {
@@ -106,8 +192,16 @@ const AddListing = () => {
         }
       }
 
-      const priceNum = parseFloat(formData.StartingPrice);
+      // Validate price
+      const reserveNum = parseFloat(formData.ReservePrice);
+      if (isNaN(reserveNum) || reserveNum <= 5000) {
+        throw new Error("Please enter a valid reserve price (minimum R5000).");
+      }
       
+      // Calculate closing time (default 7 days)
+      const closingDate = new Date();
+      closingDate.setDate(closingDate.getDate() + 7);
+
       const { error: insertError } = await supabase
         .from('listings')
         .insert({
@@ -115,8 +209,10 @@ const AddListing = () => {
           Make: formData.Make,
           Model: formData.Model,
           Year: formData.Year,
-          StartingPrice: priceNum,
-          CurrentPrice: priceNum,
+          StartingPrice: 5000,
+          CurrentPrice: 5000,
+          ReservePrice: reserveNum,
+          closes_at: closingDate.toISOString(),
           mileage: formData.mileage,
           transmission: formData.transmission,
           engine: formData.engine,
@@ -131,9 +227,11 @@ const AddListing = () => {
     } catch (err) {
       console.error(err);
       setErrorMsg(err.message);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [formData, imageFiles, imageErrors, uploadImage, navigate]);
+  // ⬆️⬆️⬆️ REPLACE handleSubmit WITH SECURE VERSION ⬆️⬆️⬆️
 
   const imageLabels = [
     'Main Image *',
@@ -147,8 +245,9 @@ const AddListing = () => {
   ];
 
   return (
-    <div className={styles.pageContainer}>
+    <div className={styles.pageWrapper}>
       <UniversalHeader />
+      <div className={styles.pageContainer}>
       <div className={styles.formCard}>
         
         <div className={styles.headerRow}>
@@ -209,18 +308,19 @@ const AddListing = () => {
               />
             </div>
             <div className={styles.inputGroup}>
-              <label className={styles.label}>Starting Price (ZAR)</label>
+              <label className={styles.label}>Reserve Price (ZAR)</label>
               <input 
                 type="number" 
-                name="StartingPrice" 
+                name="ReservePrice" 
                 placeholder="e.g. 2150000" 
                 className={styles.input}
-                value={formData.StartingPrice}
+                value={formData.ReservePrice}
                 onChange={handleInputChange}
                 required 
-                min="0"
+                min="5000"
                 step="0.01"
               />
+              <span style={{fontSize: '12px', color: '#9CA3AF', marginTop: '4px'}}>All listings open at R5,000. Your reserve is hidden.</span>
             </div>
           </div>
 
@@ -292,7 +392,10 @@ const AddListing = () => {
 
           <div className={styles.imageGrid}>
             {imageLabels.map((label, index) => (
-              <div key={index} className={`${styles.imageSlot} ${index === 0 ? styles.primarySlot : ''}`}>
+              <div 
+                key={index} 
+                className={`${styles.imageSlot} ${index === 0 ? styles.primarySlot : ''} ${imageErrors[index] ? styles.errorSlot : ''}`}
+              >
                 {previewUrls[index] ? (
                   <div className={styles.previewWrap}>
                     <img src={previewUrls[index]} alt={label} className={styles.previewImage} />
@@ -305,14 +408,23 @@ const AddListing = () => {
                   <label className={styles.fileLabel}>
                     <FaCloudUploadAlt className={styles.uploadIcon} />
                     <span className={styles.slotLabelEmpty}>{label}</span>
+                    {/* ⬇️⬇️⬇️ UPDATED INPUT WITH SECURITY ATTRIBUTES ⬇️⬇️⬇️ */}
                     <input 
                       type="file" 
-                      accept="image/*" 
+                      accept="image/jpeg,image/png,image/webp"
                       className={styles.fileInput} 
                       onChange={(e) => handleFileChange(index, e)}
                     />
+                    {/* ⬆️⬆️⬆️ UPDATED INPUT WITH SECURITY ATTRIBUTES ⬆️⬆️⬆️ */}
                   </label>
                 )}
+                {/* ⬇️⬇️⬇️ ERROR DISPLAY FOR THIS SLOT ⬇️⬇️⬇️ */}
+                {imageErrors[index] && (
+                  <div className={styles.imageError} role="alert">
+                    {imageErrors[index]}
+                  </div>
+                )}
+                {/* ⬆️⬆️⬆️ ERROR DISPLAY FOR THIS SLOT ⬆️⬆️⬆️ */}
               </div>
             ))}
           </div>
@@ -322,6 +434,7 @@ const AddListing = () => {
           </button>
         </form>
 
+      </div>
       </div>
     </div>
   );

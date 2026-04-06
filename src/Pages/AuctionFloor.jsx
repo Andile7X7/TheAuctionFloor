@@ -1,399 +1,390 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '../Modules/SupabaseClient';
-import UniversalHeader from '../Modules/UniversalHeader';
-import AuctionCard from '../Modules/AuctionCard';
 import styles from './AuctionFloor.module.css';
-import { FaTimes, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import AuctionCard from '../Modules/AuctionCard';
+import FilterSidebar from '../Modules/FilterSidebar';
+import UniversalHeader from '../Modules/UniversalHeader';
+// ⬇️⬇️⬇️ IMPORT UTILITIES ⬇️⬇️⬇️
+import { createCursorQuery, processCursorResults } from '../utils/pagination';
+import { formatZAR } from '../utils/bidValidation';
+import { getCurrentUser } from '../utils/authSecurity';
+// ⬆️⬆️⬆️ IMPORT UTILITIES ⬆️⬆️⬆️
+
+const PAGE_SIZE = 20;
 
 const AuctionFloor = () => {
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showMobileFilters, setShowMobileFilters] = useState(false);
-    const [selectedBrands, setSelectedBrands] = useState([]);
-    const [selectedModels, setSelectedModels] = useState([]);
-    const [brandSearch, setBrandSearch] = useState('');
-    const [minPrice, setMinPrice] = useState(0);
-    const [maxPrice, setMaxPrice] = useState(100000000);
-    const [minYear, setMinYear] = useState(1980);
-    const [maxYear, setMaxYear] = useState(2026);
-    const [selectedLocation, setSelectedLocation] = useState('All');
-    const [sortBy, setSortBy] = useState('high-to-low');
-    const [showSortMenu, setShowSortMenu] = useState(false);
-    const [currentUser, setCurrentUser] = useState(null);
-    const location = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const incoming = location.state || {}; // Filters passed from Home.jsx search
+  const [user, setUser] = useState(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  // Filter state — seeded from Home page search if present
+  const [filters, setFilters] = useState({
+    brands: incoming.selectedBrands || [],
+    models: incoming.selectedModels || [],
+    minPrice: incoming.minPrice || 0,
+    maxPrice: incoming.maxPrice || 10000000,
+    minYear: incoming.minYear || 1990,
+    maxYear: incoming.maxYear || 2026,
+    location: incoming.selectedLocation || 'All',
+    sortBy: 'newest',
+  });
 
-    useEffect(() => {
-        if (location.state) {
-            const { 
-                selectedBrands, 
-                selectedModels, 
-                minPrice: pMin, 
-                maxPrice: pMax, 
-                minYear: yMin, 
-                maxYear: yMax, 
-                selectedLocation: loc 
-            } = location.state;
+  // Available filter options (populated from data)
+  const [availableBrands, setAvailableBrands] = useState([]);
 
-            if (selectedBrands) setSelectedBrands(selectedBrands);
-            if (selectedModels) setSelectedModels(selectedModels);
-            if (pMin !== undefined) setMinPrice(pMin);
-            if (pMax !== undefined) setMaxPrice(pMax);
-            if (yMin !== undefined) setMinYear(yMin);
-            if (yMax !== undefined) setMaxYear(yMax);
-            if (loc) setSelectedLocation(loc);
-        }
-    }, [location.state]);
-    // Track which brand is currently expanded to show its models
-    const [expandedBrand, setExpandedBrand] = useState(null);
+  // Get current user on mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    };
+    fetchUser();
+  }, []);
 
-    const resetFilters = () => {
-        setSelectedBrands([]);
-        setSelectedModels([]);
-        setBrandSearch('');
-        setMinPrice(0);
-        setMaxPrice(100000000);
-        setMinYear(1980);
-        setMaxYear(2026);
-        setSelectedLocation('All');
-        setSortBy('high-to-low');
-        setExpandedBrand(null);
+  // ⬇️⬇️⬇️ INFINITE QUERY WITH CURSOR PAGINATION ⬇️⬇️⬇️
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ['listings', 'auction', filters],
+    queryFn: async ({ pageParam = null }) => {
+      // Build base query
+      let query = supabase
+        .from('listings')
+        .select(`
+          *,
+          bid_history(count),
+          likes(count),
+          bookmarks(count)
+        `)
+        .eq('status', 'active');
+
+      // Apply filters server-side (NOT client-side)
+      if (filters.brands.length > 0) {
+        query = query.in('Make', filters.brands);
+      }
+      
+      if (filters.models.length > 0) {
+        query = query.in('Model', filters.models);
+      }
+
+      // Price range
+      if (filters.minPrice > 0) {
+        query = query.gte('CurrentPrice', filters.minPrice);
+      }
+      if (filters.maxPrice < 10000000) {
+        query = query.lte('CurrentPrice', filters.maxPrice);
+      }
+
+      // Year range
+      if (filters.minYear > 1990) {
+        query = query.gte('Year', filters.minYear);
+      }
+      if (filters.maxYear < 2026) {
+        query = query.lte('Year', filters.maxYear);
+      }
+
+      // Location
+      if (filters.location !== 'All') {
+        query = query.eq('location', filters.location);
+      }
+
+      // Determine sort field and direction
+      let sortField = 'created_at';
+      let sortDirection = 'desc';
+
+      switch (filters.sortBy) {
+        case 'high-to-low':
+          sortField = 'CurrentPrice';
+          sortDirection = 'desc';
+          break;
+        case 'low-to-high':
+          sortField = 'CurrentPrice';
+          sortDirection = 'asc';
+          break;
+        case 'newest':
+        default:
+          sortField = 'created_at';
+          sortDirection = 'desc';
+      }
+
+      // Apply cursor pagination
+      const paginatedQuery = createCursorQuery(query, {
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+        sortBy: sortField,
+        sortDir: sortDirection,
+      });
+
+      const { data: listings, error: queryError } = await paginatedQuery;
+
+      if (queryError) throw queryError;
+
+      return processCursorResults(listings, PAGE_SIZE, sortField);
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: null,
+    staleTime: 30 * 1000, // 30 seconds fresh
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 2,
+  });
+  // ⬆️⬆️⬆️ INFINITE QUERY WITH CURSOR PAGINATION ⬆️⬆️⬆️
+
+  // Flatten all pages into single array
+  const allListings = data?.pages.flatMap(page => page.data) ?? [];
+
+  // ⬇️⬇️⬇️ FETCH FILTER OPTIONS (BRANDS/MODELS) ⬇️⬇️⬇️
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      // Get distinct brands and models
+      const { data: listingsData } = await supabase
+        .from('listings')
+        .select('Make, Model')
+        .eq('status', 'active');
+
+      if (listingsData) {
+        const brandModelsMap = {};
+        listingsData.forEach(l => {
+          if (!l.Make) return;
+          if (!brandModelsMap[l.Make]) brandModelsMap[l.Make] = new Set();
+          if (l.Model) brandModelsMap[l.Make].add(l.Model);
+        });
+
+        const mappedBrands = Object.keys(brandModelsMap).map(make => ({
+          make,
+          models: Array.from(brandModelsMap[make]).sort()
+        })).sort((a,b) => a.make.localeCompare(b.make));
+
+        setAvailableBrands(mappedBrands);
+      }
     };
 
-    const toggleBrand = (brand) => {
-        if (brand === 'All Brands') {
-            setSelectedBrands([]);
-            setSelectedModels([]);
-            setExpandedBrand(null);
-        } else {
-            setSelectedBrands(prev => {
-                const isSelected = prev.includes(brand);
-                let next;
-                if (isSelected) {
-                    // Deselect brand
-                    next = prev.filter(b => b !== brand);
-                    // Also remove any selected models from this brand
-                    const brandModels = [...new Set(listings.filter(l => l.Make === brand).map(l => l.Model))];
-                    setSelectedModels(prevModels => prevModels.filter(m => !brandModels.includes(m)));
-                    // Collapse if deselecting
-                    if (expandedBrand === brand) {
-                        setExpandedBrand(null);
-                    }
-                } else {
-                    // Select brand and expand it
-                    next = [...prev, brand];
-                    setExpandedBrand(brand);
-                }
-                return next;
-            });
-        }
-    };
+    fetchFilterOptions();
+  }, []);
+  // ⬆️⬆️⬆️ FETCH FILTER OPTIONS ⬆️⬆️⬆️
 
-    const toggleModel = (model) => {
-        setSelectedModels(prev => 
-            prev.includes(model) 
-                ? prev.filter(m => m !== model) 
-                : [...prev, model]
-        );
-    };
+  // ⬇️⬇️⬇️ INFINITE SCROLL OBSERVER ⬇️⬇️⬇️
+  const observerRef = useRef();
+  const lastListingRef = useCallback((node) => {
+    if (isFetchingNextPage) return;
+    
+    if (observerRef.current) observerRef.current.disconnect();
+    
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasNextPage) {
+        fetchNextPage();
+      }
+    });
+    
+    if (node) observerRef.current.observe(node);
+  }, [isFetchingNextPage, hasNextPage, fetchNextPage]);
+  // ⬆️⬆️⬆️ INFINITE SCROLL OBSERVER ⬆️⬆️⬆️
 
-    const getModelsForBrand = (brand) => {
-        return [...new Set(
-            listings.filter(l => l.Make === brand).map(l => l.Model)
-        )].sort();
-    };
+  // Filter change handlers
+  const handleBrandToggle = (brand) => {
+    setFilters(prev => {
+      const newBrands = prev.brands.includes(brand)
+        ? prev.brands.filter(b => b !== brand)
+        : [...prev.brands, brand];
+      
+      // Clear models when brand changes
+      return { ...prev, brands: newBrands, models: [] };
+    });
+  };
 
-    useEffect(() => {
-        const fetchAllListings = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('listings')
-                    .select('*, likes(count), comments(count)');
+  const handleModelToggle = (model) => {
+    setFilters(prev => ({
+      ...prev,
+      models: prev.models.includes(model)
+        ? prev.models.filter(m => m !== model)
+        : [...prev.models, model]
+    }));
+  };
 
-                if (error) throw error;
-                setListings(data || []);
-            } catch (err) {
-                console.error('Error fetching auction items:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
+  const handlePriceChange = (type, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [type]: parseInt(value) || 0
+    }));
+  };
 
-        const fetchUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            setCurrentUser(user);
-        };
+  const handleYearChange = (type, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [type]: parseInt(value) || 1990
+    }));
+  };
 
-        fetchAllListings();
-        fetchUser();
+  const handleLocationChange = (location) => {
+    setFilters(prev => ({ ...prev, location }));
+  };
 
-        // Realtime Subscription
-        const channel = supabase
-            .channel('auction_floor_updates')
-            .on('postgres_changes', { 
-                event: 'UPDATE', 
-                schema: 'public', 
-                table: 'listings' 
-            }, payload => {
-                if (payload.new) {
-                    setListings(current => current.map(listing => 
-                        listing.id === payload.new.id 
-                        ? { ...listing, ...payload.new } 
-                        : listing
-                    ));
-                }
-            })
-            .subscribe();
+  const handleSortChange = (sortBy) => {
+    setFilters(prev => ({ ...prev, sortBy }));
+  };
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
+  const clearFilters = () => {
+    setFilters({
+      brands: [],
+      models: [],
+      minPrice: 0,
+      maxPrice: 10000000,
+      minYear: 1990,
+      maxYear: 2026,
+      location: 'All',
+      sortBy: 'newest',
+    });
+  };
 
+  // Count active filters
+  const activeFilterCount = 
+    filters.brands.length + 
+    filters.models.length + 
+    (filters.minPrice > 0 ? 1 : 0) +
+    (filters.maxPrice < 10000000 ? 1 : 0) +
+    (filters.minYear > 1990 ? 1 : 0) +
+    (filters.maxYear < 2026 ? 1 : 0) +
+    (filters.location !== 'All' ? 1 : 0);
+
+  // Loading state
+  if (isLoading) {
     return (
-        <div className={styles.container}>
-            <UniversalHeader />
-
-            <main className={styles.mainContent}>
-                <div className={styles.heroSection}>
-                    <span className={styles.liveIndicator}>
-                        <div className={styles.pulseDot}></div> LIVE GLOBAL BIDDING
-                    </span>
-                    <h1 className={styles.heroTitle}>THE AUCTION <span style={{color: 'var(--accent)'}} className={styles.heroTitleSpan}>FLOOR</span></h1>
-                    
-                    <div className={styles.controls}>
-                        <div className={styles.sortDropdownWrap}>
-                            <button className={styles.mobileFilterBtn} onClick={() => setShowMobileFilters(true)}>
-                                FILTERS
-                            </button>
-                            <button className={styles.sortBtn} onClick={() => setShowSortMenu(!showSortMenu)}>
-                                SORT: {sortBy.replace(/-/g, ' ').toUpperCase()}
-                            </button>
-                            {showSortMenu && (
-                                <div className={styles.sortMenu}>
-                                    <div className={styles.sortMenuItem} onClick={() => { setSortBy('high-to-low'); setShowSortMenu(false); }}>Highest Price</div>
-                                    <div className={styles.sortMenuItem} onClick={() => { setSortBy('low-to-high'); setShowSortMenu(false); }}>Lowest Price</div>
-                                    <div className={styles.sortMenuItem} onClick={() => { setSortBy('newest'); setShowSortMenu(false); }}>Newest First</div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                <div className={styles.layoutBody}>
-                    {/* Sidebar Filters - Static Placeholders */}
-                    {showMobileFilters && <div className={styles.overlay} onClick={() => setShowMobileFilters(false)}></div>}
-                    <aside className={`${styles.sidebar} ${showMobileFilters ? styles.sidebarOpen : ''}`}>
-                        <div className={styles.filterSection}>
-                            <div className={styles.sidebarHeader}>
-                                <h4 className={styles.sectionTitle}>BRANDS</h4>
-                                <FaTimes className={styles.closeSidebar} onClick={() => setShowMobileFilters(false)} />
-                            </div>
-
-                            {/* Brand Search */}
-                            <div className={styles.brandSearchWrap}>
-                                <input
-                                    type="text"
-                                    className={styles.brandSearchInput}
-                                    placeholder="Search brand..."
-                                    value={brandSearch}
-                                    onChange={(e) => setBrandSearch(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Brand List with Nested Models */}
-                            <div className={styles.brandScrollContainer}>
-                                {brandSearch === '' && (
-                                    <div 
-                                        className={`${styles.filterItem} ${selectedBrands.length === 0 ? styles.activeFilter : ''}`}
-                                        onClick={() => toggleBrand('All Brands')}
-                                    >
-                                        All Brands <span className={styles.count}>{listings.length}</span>
-                                    </div>
-                                )}
-                                {[...new Set(listings.map(l => l.Make))].sort()
-                                    .filter(brand => brand?.toLowerCase().includes(brandSearch.toLowerCase()))
-                                    .map(brand => {
-                                        const isSelected = selectedBrands.includes(brand);
-                                        const isExpanded = expandedBrand === brand;
-                                        const brandModels = getModelsForBrand(brand);
-                                        
-                                        return (
-                                            <div key={brand} className={styles.brandItemWrapper}>
-                                                {/* Brand Row - Click to toggle selection, chevron to expand */}
-                                                <div 
-                                                    className={`${styles.filterItem} ${isSelected ? styles.activeFilter : ''}`}
-                                                    onClick={() => toggleBrand(brand)}
-                                                >
-                                                    <div className={styles.brandRowContent}>
-                                                        <span>{brand}</span>
-                                                        <div className={styles.brandRowActions}>
-                                                            <span className={styles.count}>
-                                                                {listings.filter(l => l.Make === brand).length}
-                                                            </span>
-                                                            {/* Chevron to expand/collapse models - only show if brand has models */}
-                                                            {brandModels.length > 0 && (
-                                                                <span 
-                                                                    className={styles.expandIcon}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setExpandedBrand(isExpanded ? null : brand);
-                                                                    }}
-                                                                >
-                                                                    {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Nested Models List - appears directly under the brand when expanded */}
-                                                {isExpanded && brandModels.length > 0 && (
-                                                    <div className={styles.modelsNestedList}>
-                                                        <div
-                                                            className={`${styles.filterItem} ${styles.modelItem} ${selectedModels.length === 0 && isSelected ? styles.activeFilter : ''}`}
-                                                            onClick={() => {
-                                                                // Clear models for this brand only
-                                                                const otherBrandModels = selectedModels.filter(m => !brandModels.includes(m));
-                                                                setSelectedModels(otherBrandModels);
-                                                            }}
-                                                        >
-                                                            All {brand} Models
-                                                            <span className={styles.count}>{brandModels.length}</span>
-                                                        </div>
-                                                        {brandModels.map(model => {
-                                                            const modelCount = listings.filter(l => l.Make === brand && l.Model === model).length;
-                                                            const isModelSelected = selectedModels.includes(model);
-                                                            
-                                                            return (
-                                                                <div
-                                                                    key={`${brand}-${model}`}
-                                                                    className={`${styles.filterItem} ${styles.modelItem} ${isModelSelected ? styles.activeFilter : ''}`}
-                                                                    onClick={() => toggleModel(model)}
-                                                                >
-                                                                    {model}
-                                                                    <span className={styles.count}>{modelCount}</span>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                }
-                            </div>
-                        </div>
-
-                        <div className={styles.filterSection}>
-                            <h4 className={styles.sectionTitle}>PRICE RANGE (R)</h4>
-                            <div className={styles.priceInputs}>
-                                <div className={styles.priceInputBox}>
-                                    <label>Min</label>
-                                    <input type="number" value={minPrice} onChange={(e) => setMinPrice(Number(e.target.value))} />
-                                </div>
-                                <div className={styles.priceInputBox}>
-                                    <label>Max</label>
-                                    <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className={styles.filterSection}>
-                            <h4 className={styles.sectionTitle}>PERIOD</h4>
-                            <div className={styles.yearFilterWrap}>
-                                <div className={styles.yearSelectBox}>
-                                    <label>From</label>
-                                    <select value={minYear} onChange={(e) => setMinYear(Number(e.target.value))}>
-                                        {Array.from({ length: 47 }, (_, i) => 1980 + i).map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
-                                </div>
-                                <div className={styles.yearSelectBox}>
-                                    <label>To</label>
-                                    <select value={maxYear} onChange={(e) => setMaxYear(Number(e.target.value))}>
-                                        {Array.from({ length: 47 }, (_, i) => 1980 + i).reverse().map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className={styles.filterSection}>
-                            <h4 className={styles.sectionTitle}>LOCATION</h4>
-                            <div className={styles.yearSelectBox} style={{ width: '100%' }}>
-                                <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}>
-                                    <option value="All">All Locations</option>
-                                    {['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'Northern Cape', 'North West', 'Western Cape'].map(prov => (
-                                         <option key={prov} value={prov}>{prov}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className={styles.sidebarActions}>
-                            <button className={styles.resetBtn} onClick={resetFilters}>RESET ALL FILTERS</button>
-                        </div>
-                    </aside>
-
-                    {/* Auction Grid */}
-                    <div className={styles.contentArea}>
-                        {loading ? (
-                            <div className={styles.loader}>Initializing Auction Floor...</div>
-                        ) : listings.length === 0 ? (
-                            <div className={styles.loader}>No active lots found. Check back soon.</div>
-                        ) : (
-                            <div className={styles.auctionGrid}>
-                                {listings
-                                    .filter(l => {
-                                        const effectivePrice = l.CurrentPrice || l.StartingPrice || 0;
-                                        const brandMatch = selectedBrands.length === 0 || selectedBrands.includes(l.Make);
-                                        const modelMatch = selectedModels.length === 0 || selectedModels.includes(l.Model);
-                                        const priceMatch = effectivePrice >= minPrice && effectivePrice <= maxPrice;
-                                        const yearMatch = l.Year >= minYear && l.Year <= maxYear;
-                                        const locMatch = selectedLocation === 'All' || l.location === selectedLocation;
-                                        return brandMatch && modelMatch && priceMatch && yearMatch && locMatch;
-                                    })
-                                    .sort((a, b) => {
-                                        const aPrice = a.CurrentPrice || a.StartingPrice || 0;
-                                        const bPrice = b.CurrentPrice || b.StartingPrice || 0;
-                                        if (sortBy === 'high-to-low') return bPrice - aPrice;
-                                        if (sortBy === 'low-to-high') return aPrice - bPrice;
-                                        if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
-                                        return 0;
-                                    })
-                                    .map((item) => (
-                                        <AuctionCard key={item.id} listing={item} currentUser={currentUser} />
-                                    ))
-                                }
-                            </div>
-                        )}
-                        
-                        <div className={styles.paginationArea}>
-                            <button className={styles.revealBtn}>REVEAL MORE LOTS</button>
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            <footer className={styles.footer}>
-                <div className={styles.footerInner}>
-                    <div className={styles.footerBrand}>
-                        <h3>CHRONOGRAPH</h3>
-                        <p>The world's most exclusive digital auction house for rare automotive pieces and engineering marvels. Curated with precision, sold with authority.</p>
-                    </div>
-                    <nav className={styles.footerNav}>
-                        <span>PRIVACY POLICY</span>
-                        <span>TERMS OF SERVICE</span>
-                        <span>CONTACT SUPPORT</span>
-                        <span>PRESS KIT</span>
-                        <span>COOKIE SETTINGS</span>
-                    </nav>
-                </div>
-                <div className={styles.footerCopyright}>
-                    © 2024 CHRONOGRAPH AUTOMOTIVE EDITORIAL. ALL RIGHTS RESERVED.
-                </div>
-            </footer>
+      <div className={styles.container}>
+        <div className={styles.loadingContainer}>
+          <div className={styles.spinner}></div>
+          <p>Loading auction floor...</p>
         </div>
+      </div>
     );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <h3>Failed to load listings</h3>
+          <p>{error?.message || 'Please try again'}</p>
+          <button onClick={() => refetch()} className={styles.retryBtn}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.container}>
+      <UniversalHeader />
+      {/* Page Title removed as per request */}
+
+      <div className={styles.mainContent}>
+        <div className={styles.layoutBody}>
+        {/* Sidebar Filters */}
+        <aside className={`${styles.sidebar} ${showMobileFilters ? styles.mobileOpen : ''}`}>
+          <FilterSidebar
+            filters={filters}
+            availableBrands={availableBrands}
+            onBrandToggle={handleBrandToggle}
+            onModelToggle={handleModelToggle}
+            onPriceChange={handlePriceChange}
+            onYearChange={handleYearChange}
+            onLocationChange={handleLocationChange}
+            onSortChange={handleSortChange}
+            onClear={clearFilters}
+            activeCount={activeFilterCount}
+          />
+        </aside>
+
+        {/* Main Grid */}
+        <main>
+          {/* Sort bar */}
+          <div className={styles.sortBar}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <span className={styles.resultsCount}>
+                {allListings.length} {allListings.length === 1 ? 'vehicle' : 'vehicles'}
+              </span>
+              <button 
+                className={styles.mobileFilterBtn}
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                style={{ display: 'none' /* handled by media query in CSS */, padding: '6px 12px', fontSize: '10px' }}
+              >
+                Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+              </button>
+            </div>
+            
+            <div className={styles.sortControls}>
+              <label>Sort by:</label>
+              <select 
+                value={filters.sortBy} 
+                onChange={(e) => handleSortChange(e.target.value)}
+              >
+                <option value="newest">Newest First</option>
+                <option value="high-to-low">Price: High to Low</option>
+                <option value="low-to-high">Price: Low to High</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Listings Grid */}
+          {allListings.length === 0 ? (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>🔍</div>
+              <h3>No vehicles found</h3>
+              <p>Try adjusting your filters or check back later.</p>
+              {activeFilterCount > 0 && (
+                <button onClick={clearFilters} className={styles.clearBtn}>
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className={styles.auctionGrid}>
+              {allListings.map((listing, index) => (
+                <div
+                  key={listing.id}
+                  ref={index === allListings.length - 1 ? lastListingRef : null}
+                  className={styles.listingWrapper}
+                >
+                  <AuctionCard
+                    listing={listing}
+                    currentUser={user}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Loading more indicator */}
+          {isFetchingNextPage && (
+            <div className={styles.loadingMore}>
+              <div className={styles.spinnerSmall}></div>
+              <span>Loading more vehicles...</span>
+            </div>
+          )}
+
+          {/* End of results */}
+          {!hasNextPage && allListings.length > 0 && (
+            <div className={styles.endOfResults}>
+              <span>You've seen all {allListings.length} vehicles</span>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+    </div>
+  );
 };
 
 export default AuctionFloor;

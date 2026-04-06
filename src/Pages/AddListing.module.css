@@ -1,11 +1,32 @@
-.pageContainer {
+.pageWrapper {
     min-height: 100vh;
     background-color: #0e111a;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #F9FAFB;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+.pageContainer {
     display: flex;
     justify-content: center;
     padding: 40px 20px;
-    font-family: 'Inter', system-ui, sans-serif;
-    color: #F9FAFB;
+    flex: 1;
+    box-sizing: border-box;
+    width: 100%;
+}
+.errorSlot {
+  border: 2px solid #ef4444;
+}
+
+.imageError {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 4px;
+  text-align: center;
 }
 
 .formCard {
@@ -17,6 +38,7 @@
     max-width: 780px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
     align-self: flex-start;
+    box-sizing: border-box;
 }
 
 .headerRow {
@@ -281,8 +303,16 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .pageContainer {
+        padding: 0;
+    }
+
     .formCard {
         padding: 28px 20px;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        max-width: 100%;
     }
 
     .headerRow {
@@ -309,11 +339,12 @@
 
 @media (max-width: 480px) {
     .pageContainer {
-        padding: 16px 8px;
+        padding: 0;
     }
 
     .formCard {
         padding: 20px 16px;
+        border-radius: 0;
     }
 
     .imageGrid {

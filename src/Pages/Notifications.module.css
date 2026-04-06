@@ -90,10 +90,21 @@
 }
 
 /* Specific Icons */
-.bidIcon { color: #34d399; }
-.likeIcon { color: #ef4444; }
-.commentIcon { color: #60a5fa; }
-.bookmarkIcon { color: #fbbf24; }
+.bidIcon {
+    color: #34d399;
+}
+
+.likeIcon {
+    color: #ef4444;
+}
+
+.commentIcon {
+    color: #60a5fa;
+}
+
+.bookmarkIcon {
+    color: #fbbf24;
+}
 
 .content {
     flex-grow: 1;
@@ -168,7 +179,8 @@
     padding: 8px;
     border-radius: 6px;
     transition: all 0.2s;
-    opacity: 0; /* Hidden until hover */
+    opacity: 0;
+    /* Hidden until hover */
 }
 
 .notificationItem:hover .deleteBtn {
@@ -229,6 +241,7 @@
     }
 
     .deleteBtn {
-        opacity: 1; /* Always show delete on mobile since no hover */
+        opacity: 1;
+        /* Always show delete on mobile since no hover */
     }
 }

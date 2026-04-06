@@ -65,7 +65,7 @@ const UniversalHeader = ({ searchTerm, onSearch }) => {
     const navItems = [
         { name: 'HOME', path: '/' },
         { name: 'AUCTIONS', path: '/auction-floor' },
-        { name: 'LIVE FEED', path: '/live-feed' },
+        { name: 'PERSONALIZED FEED', path: '/personalized-feed' },
         { name: 'TRENDING', path: '/trending' },
         { name: 'DASHBOARD', path: '/dashboard' }
     ];
