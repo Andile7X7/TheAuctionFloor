@@ -4,7 +4,7 @@ import { supabase } from '../Modules/SupabaseClient';
 import NotificationBell from '../Modules/NotificationBell';
 import styles from './Trending.module.css';
 import { FaFire, FaBolt, FaHeart } from 'react-icons/fa';
-
+import { getTransformUrl } from '../utils/imageCompression';
 import UniversalHeader from '../Modules/UniversalHeader';
 
 const Trending = () => {
@@ -157,7 +157,7 @@ const Trending = () => {
                   {intenseCars.map(car => (
                     <div key={car.id} className={`${styles.trendingCard} ${styles.cardIntense}`} onClick={() => navigate(`/listing/${car.id}`)}>
                       <div className={styles.cardLeft}>
-                        <img src={car.ImageURL} alt={car.Model} className={styles.cardImage} />
+                        <img src={getTransformUrl(car.ImageURL, { width: 400 })} alt={car.Model} className={styles.cardImage} />
                       </div>
                       <div className={styles.cardRight}>
                         <div>
@@ -190,7 +190,7 @@ const Trending = () => {
                   {highCars.map(car => (
                     <div key={car.id} className={`${styles.trendingCard} ${styles.cardHigh}`} onClick={() => navigate(`/listing/${car.id}`)}>
                       <div className={styles.cardLeft}>
-                        <img src={car.ImageURL} alt={car.Model} className={styles.cardImage} />
+                        <img src={getTransformUrl(car.ImageURL, { width: 400 })} alt={car.Model} className={styles.cardImage} />
                       </div>
                       <div className={styles.cardRight}>
                         <div>
@@ -223,7 +223,7 @@ const Trending = () => {
                   {popularCars.map(car => (
                     <div key={car.id} className={`${styles.trendingCard} ${styles.cardPopular}`} onClick={() => navigate(`/listing/${car.id}`)}>
                       <div className={styles.cardLeft}>
-                        <img src={car.ImageURL} alt={car.Model} className={styles.cardImage} />
+                        <img src={getTransformUrl(car.ImageURL, { width: 400 })} alt={car.Model} className={styles.cardImage} />
                       </div>
                       <div className={styles.cardRight}>
                         <div>

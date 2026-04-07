@@ -473,6 +473,45 @@
     border-color: #fff;
 }
 
+/* Load More Section */
+.loadMoreContainer {
+    text-align: center;
+    padding: 40px 20px 60px;
+}
+
+.loadMoreBtn {
+    background: transparent;
+    border: 1px solid #2a2a35;
+    color: #94a3b8;
+    padding: 14px 32px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.loadMoreBtn:hover:not(:disabled) {
+    background: #6366F1;
+    border-color: #6366F1;
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+
+.loadMoreBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.endMessage {
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
 @media (max-width: 768px) {
     .heroTitle {
         font-size: 2.8rem;

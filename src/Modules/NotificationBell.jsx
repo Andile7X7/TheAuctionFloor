@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaBell } from 'react-icons/fa';
 import { supabase } from './SupabaseClient';
 import styles from './NotificationBell.module.css';
+import { useRealtimeChannel } from '../utils/useRealtimeChannel';
 
 const NotificationBell = () => {
   const [user, setUser] = useState(null);
@@ -10,7 +11,6 @@ const NotificationBell = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Determine the user initially
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
@@ -35,21 +35,14 @@ const NotificationBell = () => {
     };
 
     fetchUnread();
-
-    const channel = supabase
-      .channel('global_header_notifs')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'notifications',
-        filter: `recipient_id=eq.${user.id}`
-      }, () => {
-        fetchUnread();
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
   }, [user]);
+
+  // Shared user channel — all notification listeners for this user share ONE WebSocket
+  const handleNotification = useCallback(() => {
+    setUnreadCount(prev => prev + 1);
+  }, []);
+
+  useRealtimeChannel('user', user?.id, 'notification', handleNotification);
 
   if (!user) return null;
 

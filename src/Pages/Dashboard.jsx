@@ -1,28 +1,34 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FaPlusCircle } from 'react-icons/fa';
 import { supabase } from '../Modules/SupabaseClient';
+import { apiClient } from '../utils/apiClient';
 import DashboardLayout from '../Modules/DashboardLayout';
 import OverviewCards from '../Modules/OverviewCards';
 import ActiveListings from '../Modules/ActiveListings';
 import BiddingActivity from '../Modules/BiddingActivity';
 import RecentNotifications from '../Modules/RecentNotifications';
 import styles from './Dashboard.module.css';
-// ⬇️⬇️⬇️ IMPORT AUTH SECURITY UTILITIES ⬇️⬇️⬇️
+import { getTransformUrl } from '../utils/imageCompression';
 import { getCurrentUser, sanitizeUserData } from '../utils/authSecurity';
-// ⬆️⬆️⬆️ IMPORT AUTH SECURITY UTILITIES ⬆️⬆️⬆️
 
 function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [userName, setUserName] = useState('');
   const [listings, setListings] = useState([]);
+  const [pendingListings, setPendingListings] = useState([]);
+  const [rejectedListings, setRejectedListings] = useState([]);
   const [participatingListings, setParticipatingListings] = useState([]);
   const [failedAuctions, setFailedAuctions] = useState([]);
   const [relistListingId, setRelistListingId] = useState(null);
   const [newReservePrice, setNewReservePrice] = useState('');
   const [relistError, setRelistError] = useState('');
   const [isRelisting, setIsRelisting] = useState(false);
+  const [appealListing, setAppealListing] = useState(null);
+  const [appealReason, setAppealReason] = useState('');
+  const [submittingAppeal, setSubmittingAppeal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -63,14 +69,21 @@ function Dashboard() {
 
       if (listingsError) throw listingsError;
       
-      // Separate failed auctions
+      // Separate listings into states
       const now = new Date();
       const activeOrSold = [];
+      const pending = [];
+      const rejected = [];
       const failed = [];
       
       (listingsData || []).forEach(L => {
-        // If the date has passed and the price didn't meet reserve, it failed
-        if (L.closes_at && new Date(L.closes_at) <= now && L.CurrentPrice < L.ReservePrice && L.status !== 'sold') {
+        if (!L.verified) {
+          if (L.status === 'removed') {
+            rejected.push(L);
+          } else {
+            pending.push(L);
+          }
+        } else if (L.closes_at && new Date(L.closes_at) <= now && L.CurrentPrice < L.ReservePrice && L.status !== 'sold') {
           failed.push(L);
         } else {
           activeOrSold.push(L);
@@ -78,6 +91,22 @@ function Dashboard() {
       });
       
       setListings(activeOrSold);
+      setPendingListings(pending);
+      
+      // Fetch appeals for rejected listings to prevent multiple appeals
+      let finalRejected = rejected;
+      if (rejected.length > 0) {
+        const rejectedIds = rejected.map(r => r.id);
+        const { data: appealsData } = await supabase.from('listing_appeals').select('*').in('listing_id', rejectedIds);
+        if (appealsData) {
+          finalRejected = rejected.map(r => ({
+            ...r,
+            existingAppeal: appealsData.find(a => a.listing_id === r.id)
+          }));
+        }
+      }
+      
+      setRejectedListings(finalRejected);
       setFailedAuctions(failed);
 
       // 2. Fetch User's Bidding Activity (Buyer)
@@ -130,35 +159,14 @@ function Dashboard() {
     getDashboardData();
   }, [getDashboardData]);
 
-  // 3. Realtime Bidding Status Updates - with auth validation
+  // Poll every 15s instead of a persistent WebSocket — dashboard bid status
+  // doesn't need sub-second latency and a global bid_history channel isn't
+  // user-scoped, so it can't be safely shared without client-side filtering.
   useEffect(() => {
     if (!user || participatingListings.length === 0) return;
-
-    const channel = supabase
-      .channel('dashboard_bidding_activity')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'bid_history'
-      }, async (payload) => {
-        const { listing_id, userid } = payload.new;
-
-        setParticipatingListings(prev => prev.map(item => {
-          if (item.id === listing_id) {
-            return {
-              ...item,
-              isLeading: userid === user.id
-            };
-          }
-          return item;
-        }));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, participatingListings.length]);
+    const interval = setInterval(() => getDashboardData(), 15_000);
+    return () => clearInterval(interval);
+  }, [user, participatingListings.length, getDashboardData]);
 
   const handleRelistSubmit = async () => {
     setRelistError('');
@@ -229,6 +237,34 @@ function Dashboard() {
   const isSearching = searchStr.length > 0;
   const totalResults = filteredListings.length + filteredParticipating.length;
   const hasResults = totalResults > 0;
+  const showPendingToast = location.state?.listingStatus === 'pending';
+
+  const submitAppeal = async () => {
+    if (!appealReason.trim()) return;
+    setSubmittingAppeal(true);
+    
+    try {
+      const response = await apiClient.post('/handle-content', {
+        action: 'file-appeal',
+        payload: {
+          listingId: appealListing.id,
+          reason: appealReason
+        }
+      });
+
+      if (response.error) throw new Error(response.error);
+
+      setAppealListing(null);
+      setAppealReason('');
+      alert("Your appeal has been submitted successfully. Moderation will review it shortly.");
+      
+    } catch (err) {
+      console.error('Appeal error:', err);
+      alert(err.message || "Failed to submit appeal. Please try again.");
+    } finally {
+      setSubmittingAppeal(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -279,6 +315,74 @@ function Dashboard() {
             List a Vehicle
           </button>
         </div>
+
+        {/* --- Pending Submission Toast --- */}
+        {showPendingToast && !isSearching && (
+          <div style={{ padding: '0 32px', marginBottom: '16px' }}>
+            <div style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid #FBCFE8', borderRadius: '8px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '20px' }}>⏳</span>
+              <div>
+                <h4 style={{ margin: 0, color: '#FCD34D', fontSize: '14px' }}>Listing Submitted Successfully</h4>
+                <p style={{ margin: '2px 0 0', color: '#D1D5DB', fontSize: '13px' }}>Your new listing is currently under review by our moderation team. You will receive a notification once it is verified and live on the auction floor.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- Pending Review List --- */}
+        {!isSearching && pendingListings.length > 0 && (
+          <div style={{ padding: '0 32px', marginBottom: '16px' }}>
+            <h3 style={{ color: '#FCD34D', fontSize: '16px', marginTop: 0, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{width:'8px',height:'8px',borderRadius:'50%',background:'#FCD34D'}}></div>Pending Moderation ({pendingListings.length})</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+              {pendingListings.map(L => (
+                 <div key={L.id} style={{ background: '#1F2937', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                    <img src={getTransformUrl(L.ImageURL, { width: 80, height: 50 })} alt={L.Model} style={{ width: '60px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                       <div style={{ fontWeight: 600, color: '#F9FAFB', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{L.Year} {L.Make} {L.Model}</div>
+                       <div style={{ fontSize: '12px', color: '#9CA3AF' }}>Submitted {new Date(L.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#FCD34D', background: 'rgba(251,191,36,0.1)', padding: '4px 8px', borderRadius: '4px' }}>Reviewing</div>
+                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* --- Rejected List / Appeals --- */}
+        {!isSearching && rejectedListings.length > 0 && (
+          <div style={{ padding: '0 32px', marginBottom: '24px' }}>
+             <h3 style={{ color: '#EF4444', fontSize: '16px', marginTop: 0, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><FaPlusCircle style={{transform:'rotate(45deg)'}}/> Moderation Action Required ({rejectedListings.length})</h3>
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+              {rejectedListings.map(L => (
+                 <div key={L.id} style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <img src={getTransformUrl(L.ImageURL, { width: 100, height: 60 })} alt={L.Model} style={{ width: '80px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
+                      <div style={{ flex: 1 }}>
+                         <div style={{ fontWeight: 600, color: '#F9FAFB', fontSize: '15px' }}>{L.Year} {L.Make} {L.Model}</div>
+                         <div style={{ fontSize: '13px', color: '#EF4444', marginTop: '2px', fontWeight: 500 }}>Rejected by Moderation</div>
+                         {L.admin_note && <div style={{ fontSize: '12px', color: '#D1D5DB', marginTop: '4px', fontStyle: 'italic' }}>"{L.admin_note}"</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                       <div style={{ fontSize: '11px', color: '#9CA3AF' }}>Deletes automatically in 48h unless appealed.</div>
+                       {L.existingAppeal ? (
+                         <div style={{ fontSize: '12px', fontWeight: 600, color: L.existingAppeal.status === 'denied' ? '#EF4444' : '#FCD34D' }}>
+                           {L.existingAppeal.status === 'denied' ? 'Appeal Denied - Deleting Soon' : 'Appeal Pending'}
+                         </div>
+                       ) : (
+                         <button 
+                           onClick={() => setAppealListing(L)}
+                           style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                         >
+                           File Appeal
+                         </button>
+                       )}
+                    </div>
+                 </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* --- Failed Auctions Banner --- */}
         {!isSearching && failedAuctions.length > 0 && (
@@ -399,6 +503,42 @@ function Dashboard() {
                 style={{ padding: '8px 16px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
               >
                 {isRelisting ? 'Relisting...' : 'Confirm Relist'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Appeal Modal */}
+      {appealListing && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#1F2937', padding: '32px', borderRadius: '12px', width: '450px', maxWidth: '90%', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: '20px', color: '#EF4444' }}>Appeal Listing Rejection</h2>
+            <p style={{ margin: '0 0 16px', fontSize: '14px', color: '#9CA3AF', lineHeight: 1.5 }}>
+              You are appealing the moderation decision for your <strong>{appealListing.Make} {appealListing.Model}</strong>. If you believe this was an error, or if you have resolved the issue (e.g. corrected the VIN or lowered the price), please explain below.
+            </p>
+            
+            <textarea 
+              value={appealReason}
+              onChange={(e) => setAppealReason(e.target.value)}
+              placeholder="Explain why this listing should be approved..."
+              rows={4}
+              style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #374151', background: '#111827', color: '#fff', marginBottom: '20px', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => { setAppealListing(null); setAppealReason(''); }}
+                style={{ background: 'transparent', color: '#9CA3AF', border: '1px solid #374151', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={submitAppeal}
+                disabled={submittingAppeal || !appealReason.trim()}
+                style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, opacity: (submittingAppeal || !appealReason.trim()) ? 0.5 : 1 }}
+              >
+                {submittingAppeal ? 'Submitting...' : 'Submit Appeal'}
               </button>
             </div>
           </div>

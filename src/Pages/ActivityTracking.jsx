@@ -5,6 +5,7 @@ import DashboardLayout from '../Modules/DashboardLayout';
 import AuctionCard from '../Modules/AuctionCard';
 import styles from './ActivityTracking.module.css';
 import { FaGavel, FaHeart, FaBookmark, FaChevronRight } from 'react-icons/fa';
+import { getTransformUrl } from '../utils/imageCompression';
 
 const ActivityTracking = () => {
   const location = useLocation();
@@ -159,7 +160,7 @@ const ActivityTracking = () => {
                 return (
                   <div key={idx} className={styles.activityCard} onClick={() => navigate(`/listing/${listing.id}`)}>
                     <div className={styles.imgWrap}>
-                      <img src={listing.ImageURL} alt={listing.Model} />
+                      <img src={getTransformUrl(listing.ImageURL, { width: 100 })} alt={listing.Model} />
                     </div>
                     <div className={styles.cardDetails}>
                       <div className={styles.cardHeader}>

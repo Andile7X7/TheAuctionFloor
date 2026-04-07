@@ -4,6 +4,7 @@ import { supabase } from '../Modules/SupabaseClient';
 import DashboardLayout from '../Modules/DashboardLayout';
 import styles from './MyListings.module.css';
 import { FaPen, FaTrashAlt } from 'react-icons/fa';
+import { getTransformUrl } from '../utils/imageCompression';
 
 const MyListings = () => {
   const navigate = useNavigate();
@@ -203,7 +204,7 @@ const MyListings = () => {
                   ) : (
                     <div className={styles.liveBadge}>LIVE</div>
                   )}
-                  <img src={item.ImageURL} alt={item.Model} className={styles.image} style={{ filter: item.status === 'sold' ? 'grayscale(80%) brightness(0.6)' : 'none' }} />
+                  <img src={getTransformUrl(item.ImageURL, { width: 200 })} alt={item.Model} className={styles.image} style={{ filter: item.status === 'sold' ? 'grayscale(80%) brightness(0.6)' : 'none' }} />
                 </div>
                 
                 <div className={styles.cardBody}>

@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from '../Pages/Dashboard.module.css';
 import { FaClock, FaGavel, FaArrowRight } from 'react-icons/fa';
+import { getTransformUrl } from '../utils/imageCompression';
 
 const BiddingActivity = ({ listings = [] }) => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const BiddingActivity = ({ listings = [] }) => {
         {listings.map(item => (
           <div key={item.id} className={styles.listingCard} onClick={() => navigate(`/listing/${item.id}`)} style={{cursor: 'pointer'}}>
             <div className={styles.listingImageWrapper}>
-              <img src={item.ImageURL} alt={`${item.Make} ${item.Model}`} className={styles.listingImage} />
+              <img src={getTransformUrl(item.ImageURL, { width: 200 })} alt={`${item.Make} ${item.Model}`} className={styles.listingImage} />
             </div>
             <div className={styles.listingDetails}>
               <div className={styles.listingTitleArea}>

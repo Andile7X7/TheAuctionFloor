@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import DashboardLayout from '../Modules/DashboardLayout';
 import styles from './Notifications.module.css';
 import { FaBell, FaCheck, FaTrash, FaCircle, FaGavel, FaFire, FaComment, FaBookmark, FaChevronRight } from 'react-icons/fa';
+import { useRealtimeChannel } from '../utils/useRealtimeChannel';
+import { getTransformUrl } from '../utils/imageCompression';
 
 const Notifications = () => {
     const [notifications, setNotifications] = useState([]);
@@ -35,24 +37,16 @@ const Notifications = () => {
         };
 
         fetchNotifications();
+    }, [navigate]);
 
-        // Realtime listener for new notifications
-        const channel = supabase
-            .channel('notifications_feed')
-            .on('postgres_changes', { 
-                event: 'INSERT', 
-                schema: 'public', 
-                table: 'notifications',
-                filter: `recipient_id=eq.${user?.id}`
-            }, payload => {
-                setNotifications(prev => [payload.new, ...prev]);
-            })
-            .subscribe();
+    // Shared user channel — same WebSocket as NotificationBell, zero extra connections
+    const handleNewNotification = useCallback((payload) => {
+        if (payload.eventType === 'INSERT' && payload.new) {
+            setNotifications(prev => [payload.new, ...prev]);
+        }
+    }, []);
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [navigate, user?.id]);
+    useRealtimeChannel('user', user?.id, 'notification', handleNewNotification);
 
     const markAsRead = async (id) => {
         const { error } = await supabase
@@ -150,8 +144,8 @@ const Notifications = () => {
                                         )}
                                     </div>
                                     {n.listings?.ImageURL && (
-                                        <div style={{marginLeft: '16px'}}>
-                                            <img src={n.listings.ImageURL} alt="Car" style={{width: '60px', height: '40px', objectFit: 'cover', borderRadius: '4px'}} />
+                                        <div style={{flexShrink: 0}}>
+                                            <img src={getTransformUrl(n.listings.ImageURL, { width: 60, height: 40 })} alt="Car" style={{width: '60px', height: '40px', objectFit: 'cover', borderRadius: '4px'}} />
                                         </div>
                                     )}
                                 </div>

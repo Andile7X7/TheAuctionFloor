@@ -109,14 +109,14 @@ export const sanitizeBidMetadata = (text, maxLength = 500) => {
     return { valid: false, error: `Text exceeds maximum length of ${maxLength} characters` };
   }
 
-  // XSS prevention: Escape HTML entities
+  // XSS prevention: Escape HTML entities (order matters: & must be last)
   sanitized = sanitized
-    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+    .replace(/\//g, '&#x2F;')
+    .replace(/&/g, '&amp;');
 
   // Prevent null bytes and control characters
   sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');

@@ -31,7 +31,18 @@ const AuctionFloor = () => {
     maxYear: incoming.maxYear || 2026,
     location: incoming.selectedLocation || 'All',
     sortBy: 'newest',
+    search: '',
   });
+
+  // ⬇️⬇️⬇️ DEBOUNCED SEARCH STATE (for query efficiency) ⬇️⬇️⬇️
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+  // ⬆️⬆️⬆️ DEBOUNCED SEARCH STATE ⬆️⬆️⬆️
 
   // Available filter options (populated from data)
   const [availableBrands, setAvailableBrands] = useState([]);
@@ -56,7 +67,7 @@ const AuctionFloor = () => {
     error,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ['listings', 'auction', filters],
+    queryKey: ['listings', 'auction', filters.brands, filters.models, filters.minPrice, filters.maxPrice, filters.minYear, filters.maxYear, filters.location, filters.sortBy, debouncedSearch],
     queryFn: async ({ pageParam = null }) => {
       // Build base query
       let query = supabase
@@ -67,9 +78,15 @@ const AuctionFloor = () => {
           likes(count),
           bookmarks(count)
         `)
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .eq('verified', true);
 
-      // Apply filters server-side (NOT client-side)
+      // Apply search term if present
+      if (debouncedSearch) {
+        query = query.or(`Make.ilike.%${debouncedSearch}%,Model.ilike.%${debouncedSearch}%,Year.ilike.%${debouncedSearch}%`);
+      }
+
+      // Apply filters server-side
       if (filters.brands.length > 0) {
         query = query.in('Make', filters.brands);
       }
@@ -135,7 +152,8 @@ const AuctionFloor = () => {
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialPageParam: null,
     staleTime: 30 * 1000, // 30 seconds fresh
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    gcTime: 2 * 60 * 1000, // Memory mgmt: 2 min cache
+    maxPages: 10, // Memory mgmt: Keep only 200 listings in RAM
     refetchOnWindowFocus: false,
     retry: 2,
   });
@@ -286,7 +304,10 @@ const AuctionFloor = () => {
 
   return (
     <div className={styles.container}>
-      <UniversalHeader />
+      <UniversalHeader 
+        searchTerm={filters.search} 
+        onSearch={(val) => setFilters(prev => ({ ...prev, search: val }))} 
+      />
       {/* Page Title removed as per request */}
 
       <div className={styles.mainContent}>

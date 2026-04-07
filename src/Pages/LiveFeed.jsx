@@ -26,7 +26,6 @@ const LiveFeed = () => {
         if (error) {
           console.error("LiveFeed Fetch Error:", error);
         } else {
-          console.log("Initial activities loaded:", data?.length);
           setActivities(data || []);
         }
       } catch (err) {
@@ -37,81 +36,11 @@ const LiveFeed = () => {
     };
   
     fetchActivities();
-  
-    // Subscribe to new activities
-    console.log("Setting up realtime subscription for activities...");
-    
-    const channel = supabase
-      .channel('activities-live-feed')
-      .on(
-        'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'activities'  // Make sure this matches your exact table name
-        },
-        async (payload) => {
-          console.log('🔔 REALTIME INSERT RECEIVED!', payload);
-          
-          // Don't add duplicate if it's already in the list
-          setActivities(prev => {
-            // Check if this activity is already in the list
-            const exists = prev.some(act => act.id === payload.new.id);
-            if (exists) {
-              console.log("Activity already exists, skipping");
-              return prev;
-            }
-            
-            // Fetch the complete activity with relations
-            const fetchNewActivity = async () => {
-              try {
-                const { data: newRow, error } = await supabase
-                  .from('activities')
-                  .select(`
-                    id, type, created_at, metadata, listing_id,
-                    listings(ImageURL, Make, Model)
-                  `)
-                  .eq('id', payload.new.id)
-                  .single();
-  
-                if (error) {
-                  console.error("Error fetching new activity:", error);
-                  return null;
-                }
-                return newRow;
-              } catch (err) {
-                console.error("Exception fetching new activity:", err);
-                return null;
-              }
-            };
-            
-            // We need to handle async inside setState
-            fetchNewActivity().then(newRow => {
-              if (newRow) {
-                console.log("Adding new activity to feed:", newRow);
-                setActivities(current => [newRow, ...current].slice(0, 50));
-              }
-            });
-            
-            return prev;
-          });
-        }
-      )
-      .subscribe((status, err) => {
-        console.log('📡 Realtime subscription status:', status);
-        if (err) {
-          console.error('❌ Realtime subscription error:', err);
-        }
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Successfully subscribed to activities channel!');
-        }
-      });
-  
-    // Cleanup function
-    return () => {
-      console.log("Cleaning up realtime subscription...");
-      supabase.removeChannel(channel);
-    };
+
+    // Poll every 10s — removes the global activities WebSocket entirely.
+    // At 1000 concurrent users that was 1000 sockets; now it's 100 req/s to the DB.
+    const interval = setInterval(fetchActivities, 10_000);
+    return () => clearInterval(interval);
   }, []);
 
   const formatTimeAgo = (timestamp) => {

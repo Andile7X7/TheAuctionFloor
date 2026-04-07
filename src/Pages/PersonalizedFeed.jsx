@@ -9,6 +9,7 @@ import UniversalHeader from '../Modules/UniversalHeader';
 import { formatZAR } from '../utils/bidValidation';
 import { getCurrentUser } from '../utils/authSecurity';
 import { createCursorQuery, processCursorResults } from '../utils/pagination';
+import { buildSrcSet, getTransformUrl } from '../utils/imageCompression';
 // ⬆️⬆️⬆️ IMPORT UTILITIES ⬆️⬆️⬆️
 
 const ACTIVITY_PAGE_SIZE = 20;
@@ -18,10 +19,10 @@ const PersonalizedLiveFeed = () => {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'all'; // 'all', 'bid', 'like', 'comment'
+  const [showAllWatched, setShowAllWatched] = useState(false);
+  const activeTab = searchParams.get('tab') || 'all';
 
-  // Refs for realtime subscription
-  const subscriptionRef = useRef(null);
+  // Ref for watchedIds used by the activity query
   const watchedIdsRef = useRef([]);
 
   // ⬇️⬇️⬇️ FETCH CURRENT USER ⬇️⬇️⬇️
@@ -34,102 +35,52 @@ const PersonalizedLiveFeed = () => {
   }, []);
   // ⬆️⬆️⬆️ FETCH CURRENT USER ⬆️⬆️⬆️
 
-  // ⬇️⬇️⬇️ FETCH WATCHED LISTINGS (LIKES, BOOKMARKS, BIDS) ⬇️⬇️⬇️
+  // ⬇️⬇️⬇️ FETCH WATCHED LISTINGS — single RPC (was N+1 queries) ⬇️⬇️⬇️
   const {
     data: watchedListings,
     isLoading: watchedLoading,
     isError: watchedError,
+    error: watchedErrorObj,
   } = useQuery({
     queryKey: ['watched-listings', user?.id],
     queryFn: async () => {
       if (!user) return [];
 
-      // Parallel fetch of all user's interactions
-      const [
-        { data: likes },
-        { data: bookmarks },
-        { data: bids },
-      ] = await Promise.all([
-        supabase.from('likes').select('listing_id').eq('userid', user.id),
-        supabase.from('bookmarks').select('listing_id').eq('userid', user.id),
-        supabase.from('bid_history').select('listing_id').eq('userid', user.id),
-      ]);
+      const { data, error } = await supabase.rpc('get_user_watched_listings', {
+        p_user_id: user.id,
+      });
 
-      // Collect unique listing IDs
-      const listingIds = [
-        ...new Set([
-          ...(likes?.map(l => l.listing_id) || []),
-          ...(bookmarks?.map(b => b.listing_id) || []),
-          ...(bids?.map(b => b.listing_id) || []),
-        ]),
-      ].filter(Boolean);
+      if (error) {
+        console.error('[PersonalizedFeed] RPC error:', error);
+        throw error;
+      }
+      if (!data || data.length === 0) return [];
 
-      if (listingIds.length === 0) return [];
+      // Normalise RPC result to match what the UI expects
+      const listings = data.map(row => ({
+        id: row.out_id,
+        Make: row.out_make,
+        Model: row.out_model,
+        Year: row.out_year,
+        CurrentPrice: row.out_price,
+        ImageURL: row.out_image_url,
+        status: row.out_status,
+        userBid: row.out_user_bid,
+        hasLiked: row.out_has_liked,
+        hasBookmarked: row.out_bookmarked,
+        isLeading: row.out_is_leading,
+        totalBids: row.out_total_bids,
+        totalLikes: row.out_total_likes,
+      }));
 
-      // Store for subscription filtering
-      watchedIdsRef.current = listingIds;
+      // Store IDs for the activity feed subscription
+      watchedIdsRef.current = listings.map(l => l.id);
 
-      // Fetch full listing details with current stats
-      const { data: listings } = await supabase
-        .from('listings')
-        .select(`
-          id,
-          Make,
-          Model,
-          Year,
-          CurrentPrice,
-          StartingPrice,
-          ImageURL,
-          status,
-          created_at,
-          bid_history(count),
-          likes(count)
-        `)
-        .in('id', listingIds)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-
-      // Enrich with user's relationship to each
-      const enriched = await Promise.all(
-        (listings || []).map(async (listing) => {
-          const [{ data: userBid }, { data: userLike }, { data: userBookmark }] = await Promise.all([
-            supabase
-              .from('bid_history')
-              .select('amount')
-              .eq('listing_id', listing.id)
-              .eq('userid', user.id)
-              .order('amount', { ascending: false })
-              .limit(1)
-              .maybeSingle(),
-            supabase
-              .from('likes')
-              .select('id')
-              .eq('listing_id', listing.id)
-              .eq('userid', user.id)
-              .maybeSingle(),
-            supabase
-              .from('bookmarks')
-              .select('id')
-              .eq('listing_id', listing.id)
-              .eq('userid', user.id)
-              .maybeSingle(),
-          ]);
-
-          return {
-            ...listing,
-            userBid: userBid?.amount || null,
-            hasLiked: !!userLike,
-            hasBookmarked: !!userBookmark,
-            isLeading: false, // Will be updated by realtime
-          };
-        })
-      );
-
-      return enriched;
+      return listings;
     },
     enabled: !!user,
-    staleTime: 60 * 1000, // 1 minute
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
   // ⬆️⬆️⬆️ FETCH WATCHED LISTINGS ⬆️⬆️⬆️
 
@@ -183,81 +134,16 @@ const PersonalizedLiveFeed = () => {
     enabled: !!user && watchedIdsRef.current.length > 0,
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    staleTime: 10 * 1000, // 10 seconds - "live" feel
-    refetchInterval: 30 * 1000, // Poll every 30 seconds as backup
+    // 10s polling replaces the WebSocket subscription for the activity feed.
+    // No persistent connection — React Query handles refetch automatically.
+    refetchInterval: 10 * 1000,
   });
   // ⬆️⬆️⬆️ FETCH RECENT ACTIVITY ⬆️⬆️⬆️
 
   // Flatten activity pages
   const allActivities = activityData?.pages.flatMap(page => page.data) ?? [];
 
-  // ⬇️⬇️⬇️ REALTIME SUBSCRIPTION FOR LIVE UPDATES ⬇️⬇️⬇️
-  useEffect(() => {
-    if (!user || watchedIdsRef.current.length === 0) return;
-
-    // Clean up previous subscription
-    if (subscriptionRef.current) {
-      supabase.removeChannel(subscriptionRef.current);
-    }
-
-    // Create new subscription
-    const channel = supabase
-      .channel(`personalized-feed-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'activities',
-          filter: `listing_id=in.(${watchedIdsRef.current.join(',')})`,
-        },
-        (payload) => {
-          const newActivity = payload.new;
-
-          // Optimistic update - add to cache immediately
-          queryClient.setQueryData(
-            ['personalized-activity', user.id, activeTab],
-            (oldData) => {
-              if (!oldData) return oldData;
-
-              const newPage = {
-                data: [newActivity],
-                nextCursor: null,
-                hasMore: false,
-              };
-
-              // Prepend to first page, keep max 50 items
-              return {
-                pages: [
-                  {
-                    ...oldData.pages[0],
-                    data: [newActivity, ...oldData.pages[0].data].slice(0, 50),
-                  },
-                  ...oldData.pages.slice(1),
-                ],
-                pageParams: oldData.pageParams,
-              };
-            }
-          );
-
-          // Also invalidate watched listings to refresh stats
-          queryClient.invalidateQueries({
-            queryKey: ['watched-listings', user.id],
-            exact: false,
-          });
-        }
-      )
-      .subscribe();
-
-    subscriptionRef.current = channel;
-
-    return () => {
-      if (subscriptionRef.current) {
-        supabase.removeChannel(subscriptionRef.current);
-      }
-    };
-  }, [user, watchedListings?.length, activeTab, queryClient]);
-  // ⬆️⬆️⬆️ REALTIME SUBSCRIPTION ⬆️⬆️⬆️
+  // ⬆️⬆️⬆️ POLLING REPLACES REALTIME SUBSCRIPTION ⬆️⬆️⬆️
 
   // ⬇️⬇️⬇️ INFINITE SCROLL OBSERVER ⬇️⬇️⬇️
   const observerRef = useRef();
@@ -362,8 +248,26 @@ const PersonalizedLiveFeed = () => {
     );
   }
 
+  // Error state — RPC failed (check console for Postgres error details)
+  if (watchedError) {
+    return (
+      <>
+        <UniversalHeader />
+        <div className={styles.feedContainer}>
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>⚠️</div>
+            <h2>Couldn't Load Your Watchlist</h2>
+            <p style={{ color: '#EF4444', fontSize: '13px', fontFamily: 'monospace', maxWidth: '480px' }}>
+              {watchedErrorObj?.message || 'Unknown error — check browser console for details'}
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // Empty state - no watched listings
-  if (!watchedLoading && watchedListings?.length === 0) {
+  if (!watchedLoading && (watchedListings?.length ?? 0) === 0) {
     return (
       <>
         <UniversalHeader />
@@ -391,141 +295,147 @@ const PersonalizedLiveFeed = () => {
     <>
       <UniversalHeader />
       <div className={styles.feedContainer}>
-      {/* Header */}
-      <div className={styles.header}>
-        <h1>Your Watchlist</h1>
-        <p className={styles.subtitle}>
-          Live updates on {watchedListings?.length || 0} vehicles you're tracking
-        </p>
-      </div>
-
-      {/* Watched Cars Summary */}
-      <div className={styles.watchedGrid}>
-        {watchedListings?.slice(0, 6).map((listing) => (
-          <div
-            key={listing.id}
-            className={styles.watchedCard}
-            onClick={() => navigate(`/listing/${listing.id}`)}
-          >
-            <img
-              src={listing.ImageURL}
-              alt={`${listing.Make} ${listing.Model}`}
-              className={styles.watchedImage}
-              loading="lazy"
-            />
-            <div className={styles.watchedInfo}>
-              <h4>{listing.Make} {listing.Model}</h4>
-              <p className={styles.watchedPrice}>{formatZAR(listing.CurrentPrice)}</p>
-              <div className={styles.watchedBadges}>
-                {listing.userBid !== null && (
-                  <span className={`${styles.badgeBid} ${listing.userBid >= listing.CurrentPrice ? styles.badgeLeading : styles.badgeOutbid}`}>
-                    {listing.userBid >= listing.CurrentPrice ? 'Leading' : 'Outbid'} ({formatZAR(listing.userBid)})
-                  </span>
-                )}
-                {!listing.userBid && listing.hasLiked && (
-                  <span className={styles.badgeLiked}><FaHeart /> Liked</span>
-                )}
-                {!listing.userBid && !listing.hasLiked && listing.hasBookmarked && (
-                  <span className={styles.badgeBookmarked}>🔖 Bookmarked</span>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {watchedListings?.length > 6 && (
-          <button
-            className={styles.viewAllWatched}
-            onClick={() => navigate('/my-watchlist')}
-          >
-            +{watchedListings.length - 6} more
-          </button>
-        )}
-      </div>
-
-      {/* Activity Feed */}
-      <div className={styles.feedSection}>
-        <div className={styles.feedHeader}>
-          <h2>Recent Activity</h2>
-
-          {/* Filter Tabs */}
-          <div className={styles.filterTabs}>
-            {[
-              { key: 'all', label: 'All', icon: null },
-              { key: 'bid', label: 'Bids', icon: <FaGavel /> },
-              { key: 'like', label: 'Likes', icon: <FaHeart /> },
-              { key: 'comment', label: 'Comments', icon: <FaComment /> },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                className={`${styles.tab} ${activeTab === tab.key ? styles.activeTab : ''}`}
-                onClick={() => setSearchParams({ tab: tab.key })}
-              >
-                {tab.icon && <span className={styles.tabIcon}>{tab.icon}</span>}
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        {/* Header */}
+        <div className={styles.header}>
+          <h1>Your Watchlist</h1>
+          <p className={styles.subtitle}>
+            Live updates on {watchedListings?.length || 0} vehicles you're tracking
+          </p>
         </div>
 
-        {/* Activity List */}
-        {activityLoading ? (
-          <div className={styles.loadingActivities}>
-            <div className={styles.spinnerSmall}></div>
-            <span>Loading activity...</span>
-          </div>
-        ) : allActivities.length === 0 ? (
-          <div className={styles.noActivity}>
-            <p>No recent activity on your watched cars.</p>
-            <span>Check back soon or browse more listings!</span>
-          </div>
-        ) : (
-          <div className={styles.activityList}>
-            {allActivities.map((activity, index) => (
+        {/* Watched Cars Summary */}
+        <div className={styles.watchedGrid}>
+          {watchedListings
+            ?.slice(0, showAllWatched ? watchedListings.length : 6)
+            .map((listing) => (
               <div
-                key={`${activity.id}-${index}`}
-                ref={index === allActivities.length - 1 ? lastActivityRef : null}
-                className={`${styles.activityItem} ${styles[activity.type]}`}
-                onClick={() => navigate(`/listing/${activity.listing_id}`)}
+                key={listing.id}
+                className={styles.watchedCard}
+                onClick={() => navigate(`/listing/${listing.id}`)}
               >
-                <div className={styles.activityIcon}>
-                  {getActivityIcon(activity.type)}
-                </div>
-
-                <div className={styles.activityContent}>
-                  <div className={styles.activityText}>
-                    {getActivityText(activity)}
-                  </div>
-                  <div className={styles.activityMeta}>
-                    <span className={styles.timeAgo}>{getTimeAgo(activity.created_at)}</span>
-                    {activity.listings?.ImageURL && (
-                      <img
-                        src={activity.listings.ImageURL}
-                        alt=""
-                        className={styles.activityThumb}
-                      />
+                <img
+                  src={getTransformUrl(listing.ImageURL, { width: 400 })}
+                  srcSet={buildSrcSet(listing.ImageURL, [200, 400, 800])}
+                  sizes="(max-width: 480px) 200px, 400px"
+                  alt={`${listing.Make} ${listing.Model}`}
+                  className={styles.watchedImage}
+                  loading="lazy"
+                />
+                <div className={styles.watchedInfo}>
+                  <h4>{listing.Make} {listing.Model}</h4>
+                  <p className={styles.watchedPrice}>{formatZAR(listing.CurrentPrice)}</p>
+                  <div className={styles.watchedBadges}>
+                    {listing.userBid !== null && (
+                      <span className={`${styles.badgeBid} ${listing.userBid >= listing.CurrentPrice ? styles.badgeLeading : styles.badgeOutbid}`}>
+                        {listing.userBid >= listing.CurrentPrice ? 'Leading' : 'Outbid'} ({formatZAR(listing.userBid)})
+                      </span>
+                    )}
+                    {!listing.userBid && listing.hasLiked && (
+                      <span className={styles.badgeLiked}><FaHeart /> Liked</span>
+                    )}
+                    {!listing.userBid && !listing.hasLiked && listing.hasBookmarked && (
+                      <span className={styles.badgeBookmarked}>🔖 Bookmarked</span>
                     )}
                   </div>
                 </div>
               </div>
             ))}
 
-            {isFetchingNextPage && (
-              <div className={styles.loadingMore}>
-                <div className={styles.spinnerSmall}></div>
-                <span>Loading more...</span>
-              </div>
-            )}
+          {watchedListings?.length > 6 && (
+            <button
+              className={styles.viewAllWatched}
+              onClick={() => setShowAllWatched(prev => !prev)}
+            >
+              {showAllWatched
+                ? 'Show less'
+                : `+${watchedListings.length - 6} more`}
+            </button>
+          )}
+        </div>
 
-            {!hasNextPage && allActivities.length > 0 && (
-              <div className={styles.endOfFeed}>
-                <span>You're all caught up!</span>
-              </div>
-            )}
+        {/* Activity Feed */}
+        <div className={styles.feedSection}>
+          <div className={styles.feedHeader}>
+            <h2>Recent Activity</h2>
+
+            {/* Filter Tabs */}
+            <div className={styles.filterTabs}>
+              {[
+                { key: 'all', label: 'All', icon: null },
+                { key: 'bid', label: 'Bids', icon: <FaGavel /> },
+                { key: 'like', label: 'Likes', icon: <FaHeart /> },
+                { key: 'comment', label: 'Comments', icon: <FaComment /> },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  className={`${styles.tab} ${activeTab === tab.key ? styles.activeTab : ''}`}
+                  onClick={() => setSearchParams({ tab: tab.key })}
+                >
+                  {tab.icon && <span className={styles.tabIcon}>{tab.icon}</span>}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+
+          {/* Activity List */}
+          {activityLoading ? (
+            <div className={styles.loadingActivities}>
+              <div className={styles.spinnerSmall}></div>
+              <span>Loading activity...</span>
+            </div>
+          ) : allActivities.length === 0 ? (
+            <div className={styles.noActivity}>
+              <p>No recent activity on your watched cars.</p>
+              <span>Check back soon or browse more listings!</span>
+            </div>
+          ) : (
+            <div className={styles.activityList}>
+              {allActivities.map((activity, index) => (
+                <div
+                  key={`${activity.id}-${index}`}
+                  ref={index === allActivities.length - 1 ? lastActivityRef : null}
+                  className={`${styles.activityItem} ${styles[activity.type]}`}
+                  onClick={() => navigate(`/listing/${activity.listing_id}`)}
+                >
+                  <div className={styles.activityIcon}>
+                    {getActivityIcon(activity.type)}
+                  </div>
+
+                  <div className={styles.activityContent}>
+                    <div className={styles.activityText}>
+                      {getActivityText(activity)}
+                    </div>
+                    <div className={styles.activityMeta}>
+                      <span className={styles.timeAgo}>{getTimeAgo(activity.created_at)}</span>
+                      {activity.listings?.ImageURL && (
+                        <img
+                          src={activity.listings.ImageURL}
+                          alt=""
+                          className={styles.activityThumb}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {isFetchingNextPage && (
+                <div className={styles.loadingMore}>
+                  <div className={styles.spinnerSmall}></div>
+                  <span>Loading more...</span>
+                </div>
+              )}
+
+              {!hasNextPage && allActivities.length > 0 && (
+                <div className={styles.endOfFeed}>
+                  <span>You're all caught up!</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
     </>
   );
 };

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaBookmark, FaFire, FaRegComment, FaBolt, FaGavel } from 'react-icons/fa';
 import { supabase } from './SupabaseClient';
 import styles from '../Pages/AuctionFloor.module.css';
+import { buildSrcSet, getTransformUrl } from '../utils/imageCompression';
 
 const AUCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 1 week in ms
 
@@ -17,7 +18,9 @@ const useCountdown = (createdAt) => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimeLeft(getTimeLeft());
+      const remaining = getTimeLeft();
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(interval);
     }, 1000);
     return () => clearInterval(interval);
   }, [createdAt]);
@@ -119,7 +122,15 @@ const AuctionCard = ({ listing, currentUser }) => {
         <button className={styles.bookmarkBtn} onClick={(e) => e.stopPropagation()}>
           <FaBookmark />
         </button>
-        <img src={listing.ImageURL} alt={listing.Model} className={styles.cardImage} style={{ filter: listing.status === 'sold' ? 'grayscale(80%) brightness(0.6)' : 'none' }} />
+        <img
+          src={getTransformUrl(listing.ImageURL, { width: 800 })}
+          srcSet={buildSrcSet(listing.ImageURL)}
+          sizes="(max-width: 480px) 400px, (max-width: 1024px) 800px, 800px"
+          alt={listing.Model}
+          className={styles.cardImage}
+          style={{ filter: listing.status === 'sold' ? 'grayscale(80%) brightness(0.6)' : 'none' }}
+          loading="lazy"
+        />
         <div className={styles.cardTitleOverlay}>
           <span className={styles.lotNumber}>LOT #{listing.id.toString().padStart(3, '0')}</span>
           <h3 className={styles.cardTitle}>{listing.Year} {listing.Make} {listing.Model}</h3>

@@ -4,14 +4,14 @@ import { supabase } from '../Modules/SupabaseClient';
 import styles from './AddListing.module.css';
 import UniversalHeader from '../Modules/UniversalHeader';
 import { FaArrowLeft, FaCloudUploadAlt, FaSpinner, FaTimes } from 'react-icons/fa';
-// ⬇️⬇️⬇️ IMPORT IMAGE SECURITY UTILITIES ⬇️⬇️⬇️
 import { 
   validateMultipleImages, 
   createSecurePreview, 
   revokePreview 
 } from '../utils/imageSecurity';
 import { getCurrentUser } from '../utils/authSecurity';
-// ⬆️⬆️⬆️ IMPORT IMAGE SECURITY UTILITIES ⬆️⬆️⬆️
+import { compressImage } from '../utils/imageCompression';
+import { sanitizeListingField } from '../utils/contentSanitizer';
 
 const AddListing = () => {
   const navigate = useNavigate();
@@ -74,19 +74,28 @@ const AddListing = () => {
 
     const imageData = validation.images[0];
 
+    // ── Compress before storing (Canvas → JPEG, max 1920×1080 @ 85%) ──
+    let compressedFile;
+    try {
+      const blob = await compressImage(file);
+      compressedFile = new File([blob], imageData.sanitizedName, { type: 'image/jpeg' });
+    } catch (compressionErr) {
+      console.warn('[AddListing] Compression failed, using original:', compressionErr);
+      compressedFile = file; // Graceful fallback — never block the upload
+    }
+
     // Revoke old preview to prevent memory leak
     if (previewUrls[index]) {
       revokePreview(previewUrls[index]);
     }
 
-    // Create secure preview
+    // Preview from original (instant) — upload uses compressed
     const securePreviewUrl = createSecurePreview(file);
 
-    // Store validated image data
     setImageFiles(prev => {
       const updated = [...prev];
       updated[index] = {
-        file: file,
+        file: compressedFile,          // Compressed file for upload
         sanitizedName: imageData.sanitizedName,
         dimensions: imageData.dimensions,
         validated: true
@@ -131,32 +140,34 @@ const AddListing = () => {
   // ⬆️⬆️⬆️ REPLACE removeImage WITH SECURE VERSION ⬆️⬆️⬆️
 
   // ⬇️⬇️⬇️ REPLACE uploadImage WITH SECURE VERSION ⬇️⬇️⬇️
-  const uploadImage = useCallback(async (imageData, userId, index) => {
+  const uploadImage = useCallback(async (imageData, _userId, index) => {
     if (!imageData || !imageData.validated) {
       throw new Error(`Image ${index + 1} failed validation`);
     }
 
-    // Use sanitized filename from validation
-    const filePath = `${userId}/${Date.now()}_${imageData.sanitizedName}`;
-    
+    // Unguessable path — use getRandomValues which works in both HTTP (dev) and HTTPS (prod).
+    // crypto.randomUUID() requires a secure context and fails over local network HTTP.
+    const uniqueId = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+    const filePath = `listings/${uniqueId}_${imageData.sanitizedName}`;
+
     const { error: uploadError } = await supabase.storage
       .from('Images')
       .upload(filePath, imageData.file, {
-        cacheControl: '3600',
+        cacheControl: '31536000', // 1 year — images are immutable once uploaded
         upsert: false,
-        contentType: imageData.file.type // Explicitly set content type
+        contentType: 'image/jpeg', // Always JPEG after compression
       });
 
-    if (uploadError) throw new Error(`Image ${index + 1} Upload Failed: ${uploadError.message}`);
+    if (uploadError) throw new Error(`Image ${index + 1} upload failed: ${uploadError.message}`);
 
-    // Get signed URL with transformation parameters
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    // Public URL — works with Supabase Image Transformations
+    const { data } = supabase.storage
       .from('Images')
-      .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
-      
-    if (signedUrlError) throw new Error(`URL Generation Failed: ${signedUrlError.message}`);
-      
-    return signedUrlData.signedUrl;
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   }, []);
   // ⬆️⬆️⬆️ REPLACE uploadImage WITH SECURE VERSION ⬆️⬆️⬆️
 
@@ -186,11 +197,29 @@ const AddListing = () => {
           const url = await uploadImage(imageFiles[i], user.id, i);
           if (i === 0) {
             imageUrls.ImageURL = url;
-          } else {
+          } else if (i < 7) {
+            // Postgres schema only has up to image7url. We safely drop extra images instead of crashing the Database insert.
             imageUrls[`image${i + 1}url`] = url;
           }
         }
       }
+
+      // Sanitize listing text fields
+      const sanitizedMake = sanitizeListingField(formData.Make, { maxLength: 100 });
+      if (!sanitizedMake.valid) throw new Error(`Make: ${sanitizedMake.error}`);
+
+      const sanitizedModel = sanitizeListingField(formData.Model, { maxLength: 150 });
+      if (!sanitizedModel.valid) throw new Error(`Model: ${sanitizedModel.error}`);
+
+      const sanitizedYear = formData.Year.trim();
+      const yearNum = parseInt(sanitizedYear, 10);
+      if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 1) {
+        throw new Error('Please enter a valid vehicle year (1900–' + (new Date().getFullYear() + 1) + ').');
+      }
+
+      const sanitizedMileage = formData.mileage?.trim() || null;
+      const sanitizedTransmission = formData.transmission?.trim() || null;
+      const sanitizedEngine = formData.engine?.trim() || null;
 
       // Validate price
       const reserveNum = parseFloat(formData.ReservePrice);
@@ -202,27 +231,43 @@ const AddListing = () => {
       const closingDate = new Date();
       closingDate.setDate(closingDate.getDate() + 7);
 
+      // Check seller verification status for listing approval flow
+      const { data: sellerData } = await supabase
+        .from('users')
+        .select('seller_verified')
+        .eq('userid', user.id)
+        .single();
+
+      const isVerifiedSeller = sellerData?.seller_verified ?? false;
+      const isSampleReview = isVerifiedSeller && Math.random() < 0.10;
+      const listingVerified = isVerifiedSeller;
+
       const { error: insertError } = await supabase
         .from('listings')
         .insert({
           userid: user.id,
-          Make: formData.Make,
-          Model: formData.Model,
-          Year: formData.Year,
+          Make: sanitizedMake.sanitized,
+          Model: sanitizedModel.sanitized,
+          Year: sanitizedYear,
           StartingPrice: 5000,
           CurrentPrice: 5000,
           ReservePrice: reserveNum,
           closes_at: closingDate.toISOString(),
-          mileage: formData.mileage,
-          transmission: formData.transmission,
-          engine: formData.engine,
-          location: formData.location,
+          mileage: sanitizedMileage,
+          transmission: sanitizedTransmission,
+          engine: sanitizedEngine,
+          location: formData.location || null,
+          verified: listingVerified,
+          sample_review: isSampleReview,
           ...imageUrls
         });
 
       if (insertError) throw new Error(`Database Insert Failed: ${insertError.message}`);
 
-      navigate('/dashboard');
+      // Redirect to dashboard with a message about review status
+      navigate('/dashboard', {
+        state: { listingStatus: listingVerified ? 'live' : 'pending' }
+      });
       
     } catch (err) {
       console.error(err);

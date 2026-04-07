@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import styles from './RecentNotifications.module.css';
 import { FaBell, FaGavel, FaFire, FaHeart, FaComment, FaBookmark } from 'react-icons/fa';
+import { useRealtimeChannel } from '../utils/useRealtimeChannel';
+import { getTransformUrl } from '../utils/imageCompression';
 
 const RecentNotifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -32,29 +34,21 @@ const RecentNotifications = () => {
     };
 
     fetchRecentNotifications();
-
-    // Setup realtime subscription
-    const channel = supabase
-      .channel('recent_notifications_feed')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications'
-      }, async (payload) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user && payload.new.recipient_id === user.id) {
-            setNotifications(prev => {
-                const updated = [payload.new, ...prev];
-                return updated.slice(0, 5); // keep it at 5 max
-            });
-        }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  // Shared user channel — no new WebSocket, reuses NotificationBell's connection
+  const [userId, setUserId] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id ?? null));
+  }, []);
+
+  const handleNewNotification = useCallback((payload) => {
+    if (payload.eventType === 'INSERT' && payload.new) {
+      setNotifications(prev => [payload.new, ...prev].slice(0, 5));
+    }
+  }, []);
+
+  useRealtimeChannel('user', userId, 'notification', handleNewNotification);
 
   const getIcon = (type) => {
     switch (type) {
@@ -120,7 +114,7 @@ const RecentNotifications = () => {
               </div>
               {n.listings?.ImageURL && (
                 <div style={{ marginLeft: '12px', flexShrink: 0 }}>
-                  <img src={n.listings.ImageURL} alt="Car" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />
+                  <img src={getTransformUrl(n.listings.ImageURL, { width: 40, height: 40 })} alt="Car" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />
                 </div>
               )}
             </div>

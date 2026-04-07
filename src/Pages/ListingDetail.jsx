@@ -1,902 +1,1041 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { 
+  useState, 
+  useEffect, 
+  useRef, 
+  useCallback, 
+  useMemo,
+  memo
+} from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../Modules/SupabaseClient';
 import styles from './ListingDetail.module.css';
 import UniversalHeader from '../Modules/UniversalHeader';
-import { FaBookmark, FaShareAlt, FaShieldAlt, FaThumbsUp, FaFire, FaTimes, FaChevronLeft, FaChevronRight, FaArrowLeft, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { 
+  FaBookmark, 
+  FaShareAlt, 
+  FaShieldAlt, 
+  FaFire, 
+  FaTimes, 
+  FaChevronLeft, 
+  FaChevronRight, 
+  FaArrowLeft, 
+  FaChevronDown, 
+  FaChevronUp 
+} from 'react-icons/fa';
 import AuthPromptModal from '../Modules/AuthPromptModal';
 import LoadingScreen from '../Modules/LoadingScreen';
 import BidConfirmToast from '../Modules/BidConfirmToast';
 import BidConfirmModal from '../Modules/BidConfirmModal';
-import NotificationBell from '../Modules/NotificationBell';
 import UserAvatar from '../Modules/UserAvatar';
-
 import { 
   sanitizeBidAmount, 
-  sanitizeBidMetadata, 
   checkBidRateLimit,
   getDynamicMinBid,
   formatZAR 
 } from '../utils/bidValidation';
-import { getCurrentUser, withAuth } from '../utils/authSecurity';
+import { sanitizeContent } from '../utils/contentSanitizer';
+import { useListingDetail } from '../hooks/useListingDetail';
+import { apiClient } from '../utils/apiClient';
+import ReportModal from '../Modules/ReportModal';
+import CountdownTimer from '../Modules/CountdownTimer';
 
-const CommentNode = ({ comment, handleReply, handleLike, handleDelete, currentUserId, listingOwnerId, styles }) => {
+// ==========================================
+// OPTIMIZED COMMENT NODE - Memoized
+// ==========================================
+const CommentNode = memo(({ 
+  comment, 
+  handleReply, 
+  handleLike, 
+  handleDelete, 
+  currentUserId, 
+  listingOwnerId, 
+  styles 
+}) => {
+  const hasLiked = comment.likes?.includes(currentUserId);
+  
   return (
     <div className={styles.comment}>
-      <UserAvatar name={comment.firstname} src={comment.avatar_url} bgColor={comment.avatar_bg} size={36} style={{ marginRight: '16px' }} />
+      <UserAvatar 
+        name={comment.firstname} 
+        src={comment.avatar_url} 
+        bgColor={comment.avatar_bg} 
+        size={36} 
+        style={{ marginRight: '16px' }} 
+      />
       <div className={styles.commentBody}>
         <div className={styles.commentTop}>
-          <div style={{display: 'flex', alignItems: 'center'}}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
             <span className={styles.commentAuthor}>{comment.firstname}</span>
-            {comment.userid === listingOwnerId && <span className={styles.sellerBadge}>Seller</span>}
+            {comment.userid === listingOwnerId && (
+              <span className={styles.sellerBadge}>Seller</span>
+            )}
           </div>
-          <span className={styles.commentTime}>{new Date(comment.created_at).toLocaleDateString()}</span>
+          <span className={styles.commentTime}>
+            {new Date(comment.created_at).toLocaleDateString()}
+          </span>
         </div>
         <div className={styles.commentText}>{comment.content}</div>
         <div className={styles.commentActions}>
-           <button 
-             className={`${styles.replyBtn} ${comment.likes?.includes(currentUserId) ? styles.heatActiveSmall : ''}`} 
-             onClick={() => handleLike(comment)}
-             style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-           >
-             <FaFire style={{ color: comment.likes?.includes(currentUserId) ? '#ffb480' : 'inherit' }} /> 
-             {comment.likes?.length > 0 ? comment.likes.length : 'HEAT'}
-           </button>
-           <button className={styles.replyBtn} onClick={() => handleReply(comment)}>REPLY</button>
-           {comment.userid === currentUserId && (
-             <button className={styles.replyBtn} onClick={() => handleDelete(comment.id)} style={{ color: '#EF4444' }}>DELETE</button>
-           )}
+          <button 
+            className={`${styles.replyBtn} ${hasLiked ? styles.heatActiveSmall : ''}`} 
+            onClick={() => handleLike(comment)}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <FaFire style={{ color: hasLiked ? '#ffb480' : 'inherit' }} /> 
+            {comment.likes?.length > 0 ? comment.likes.length : 'HEAT'}
+          </button>
+          <button 
+            className={styles.replyBtn} 
+            onClick={() => handleReply(comment)}
+          >
+            REPLY
+          </button>
+          {comment.userid === currentUserId && (
+            <button 
+              className={styles.replyBtn} 
+              onClick={() => handleDelete(comment.id)} 
+              style={{ color: '#EF4444' }}
+            >
+              DELETE
+            </button>
+          )}
         </div>
         
-        {comment.replies && comment.replies.length > 0 && (
+        {comment.replies?.length > 0 && (
           <div className={styles.repliesContainer}>
             {comment.replies.map(reply => (
-              <CommentNode key={reply.id} comment={reply} handleReply={handleReply} handleLike={handleLike} handleDelete={handleDelete} currentUserId={currentUserId} listingOwnerId={listingOwnerId} styles={styles} />
+              <CommentNode 
+                key={reply.id} 
+                comment={reply} 
+                handleReply={handleReply} 
+                handleLike={handleLike} 
+                handleDelete={handleDelete} 
+                currentUserId={currentUserId} 
+                listingOwnerId={listingOwnerId} 
+                styles={styles} 
+              />
             ))}
           </div>
         )}
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.comment.id === nextProps.comment.id &&
+    prevProps.comment.likes?.length === nextProps.comment.likes?.length &&
+    prevProps.comment.content === nextProps.comment.content &&
+    prevProps.currentUserId === nextProps.currentUserId &&
+    prevProps.listingOwnerId === nextProps.listingOwnerId
+  );
+});
 
+// ==========================================
+// LISTING DETAIL COMPONENT
+// ==========================================
 const ListingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const commentInputRef = useRef(null);
   const commentsSectionRef = useRef(null);
   
-  const [listing, setListing] = useState(null);
+  // ==========================================
+  // ALL STATE HOOKS FIRST - No conditions, no returns before this
+  // ==========================================
+  
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUserName, setCurrentUserName] = useState('');
+  const [userLoading, setUserLoading] = useState(true);
+  
+  // Data fetching hook
+  const { 
+    data: detail, 
+    isLoading: detailLoading, 
+    error: detailError, 
+    mutate: refreshDetail 
+  } = useListingDetail(id, user?.id);
+  
+  // UI state
   const [bidAmount, setBidAmount] = useState('');
   const [bidding, setBidding] = useState(false);
   const [bidError, setBidError] = useState('');
-  const [currentUserName, setCurrentUserName] = useState('');
-
-  // New Table States
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [heatCount, setHeatCount] = useState(0);
-  const isOwner = user?.id && listing?.userid && user.id === listing.userid;
   const [isLiked, setIsLiked] = useState(false);
   const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = useState(null);
   const [bidHistory, setBidHistory] = useState([]);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [timeRemainingObj, setTimeRemainingObj] = useState(null);
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
+  
+  // Modal state
   const [authPrompt, setAuthPrompt] = useState({ visible: false, message: '' });
   const [bidConfirm, setBidConfirm] = useState(null);
   const [showBidModal, setShowBidModal] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [timeRemainingObj, setTimeRemainingObj] = useState(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   
-  // Comments collapse state
-  const [commentsExpanded, setCommentsExpanded] = useState(false);
+  // Comment state
+  const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  
+  // Constants
   const VISIBLE_COMMENTS = 3;
-
-  const showAuthPrompt = (message) => setAuthPrompt({ visible: true, message });
-  const closeAuthPrompt = () => setAuthPrompt({ visible: false, message: '' });
-
+  
+  // ==========================================
+  // DERIVED VALUES - After all state hooks
+  // ==========================================
+  
+  const listing = detail?.listing || null;
+  const isOwner = user?.id && listing?.userid && user.id === listing.userid;
+  
+  // ==========================================
+  // IMAGE GALLERY - All image-related hooks together
+  // ==========================================
+  
+  const allImages = useMemo(() => {
+    if (!listing) return [];
+    return [
+      listing.ImageURL, 
+      listing.image2url, 
+      listing.image3url, 
+      listing.image4url,
+      listing.image5url, 
+      listing.image6url, 
+      listing.image7url
+    ].filter(Boolean);
+  }, [listing]);
+  
+  const imageCount = allImages.length;
+  
+  // Reset image index when listing changes
   useEffect(() => {
-    const fetchListing = async () => {
-      // Check auth status so they can use the app headers
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-
-      if (user) {
-        const { data: profileData } = await supabase
+    setActiveImageIndex(0);
+  }, [listing?.id]);
+  
+  const currentImageNum = imageCount > 0 ? activeImageIndex + 1 : 0;
+  const currentImage = allImages[activeImageIndex] || null;
+  
+  // ==========================================
+  // CALLBACKS - After all hooks they depend on
+  // ==========================================
+  
+  const goToPrev = useCallback(() => {
+    setActiveImageIndex(i => {
+      if (imageCount === 0) return 0;
+      return (i - 1 + imageCount) % imageCount;
+    });
+  }, [imageCount]);
+  
+  const goToNext = useCallback(() => {
+    setActiveImageIndex(i => {
+      if (imageCount === 0) return 0;
+      return (i + 1) % imageCount;
+    });
+  }, [imageCount]);
+  
+  const showAuthPrompt = useCallback((message) => {
+    setAuthPrompt({ visible: true, message });
+  }, []);
+  
+  const closeAuthPrompt = useCallback(() => {
+    setAuthPrompt({ visible: false, message: '' });
+  }, []);
+  
+  const formatZARLocal = useCallback((amount) => {
+    return new Intl.NumberFormat('en-ZA', { 
+      style: 'currency', 
+      currency: 'ZAR', 
+      maximumFractionDigits: 0 
+    }).format(amount || 0);
+  }, []);
+  
+  // ==========================================
+  // USER FETCHING EFFECT
+  // ==========================================
+  
+  useEffect(() => {
+    let mounted = true;
+    
+    const fetchUser = async () => {
+      try {
+        const { data: { user: authUser }, error } = await supabase.auth.getUser();
+        
+        if (error || !authUser || !mounted) {
+          if (mounted) setUserLoading(false);
+          return;
+        }
+        
+        const profilePromise = supabase
           .from('users')
           .select('firstname, lastname')
-          .eq('userid', user.id)
+          .eq('userid', authUser.id)
           .maybeSingle();
-        if (profileData) {
-          setCurrentUserName(`${profileData.firstname || ''} ${profileData.lastname || ''}`.trim() || user.email?.split('@')[0] || 'Someone');
-        } else {
-          setCurrentUserName(user.email?.split('@')[0] || 'Someone');
-        }
-      }
-
-      // Fetch the specific listing
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        console.error(error);
-      } else {
-        setListing(data);
-        const dynamicInc = getDynamicMinBid(data.CurrentPrice || data.StartingPrice || 0);
-        const nextIncrement = (data.CurrentPrice || data.StartingPrice || 0) + dynamicInc;
-        setBidAmount(nextIncrement.toString());
-      }
-
-      const listingId = Number(id);
-
-      // Fetch Likes
-      const { data: likesData, error: likesError } = await supabase.from('likes').select('*').eq('listing_id', listingId);
-      if (likesError) console.error('Error fetching likes:', likesError);
-      
-      if (likesData) {
-        setHeatCount(likesData.length);
-        if (user) {
-          setIsLiked(likesData.some(l => l.userid === user.id));
-        } else {
-          setIsLiked(false);
-        }
-      } else {
-        setHeatCount(0);
-        setIsLiked(false);
-      }
-
-      // Fetch Bookmarks
-      if (user) {
-        const { data: bookmarkData, error: bookmarkError } = await supabase
-          .from('bookmarks')
-          .select('*')
-          .eq('listing_id', listingId)
-          .eq('userid', user.id);
           
-        if (bookmarkError) console.error('Error fetching bookmarks:', bookmarkError);
-        setIsBookmarked(bookmarkData && bookmarkData.length > 0);
-      } else {
-        setIsBookmarked(false);
+        const [profileResult] = await Promise.all([profilePromise]);
+        
+        if (!mounted) return;
+        
+        const profileData = profileResult.data;
+        const displayName = profileData 
+          ? `${profileData.firstname || ''} ${profileData.lastname || ''}`.trim() 
+          : authUser.email?.split('@')[0] || 'Someone';
+          
+        setUser(authUser);
+        setCurrentUserName(displayName);
+      } catch (err) {
+        console.error('User fetch error:', err);
+      } finally {
+        if (mounted) setUserLoading(false);
       }
-
-      // Fetch Comments
-      const { data: cxData, error: cxError } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('listing_id', listingId)
-        .order('created_at', { ascending: false });
-      if (cxError) console.error('Error fetching comments:', cxError);
-      
-      if (cxData && cxData.length > 0) {
-        const userIds = [...new Set(cxData.map(c => c.userid))];
-        const commentIds = cxData.map(c => c.id);
-
-        let usersData = [];
-        let usersError = null;
-
-        try {
-          // Attempt full selection
-          const { data, error } = await supabase
-            .from('users')
-            .select('userid, firstname, avatar_url, avatar_bg')
-            .in('userid', userIds);
-          
-          if (error) throw error;
-          usersData = data;
-        } catch (err) {
-          // Fallback selection
-          const { data: basicData, error: basicError } = await supabase
-            .from('users')
-            .select('userid, firstname')
-            .in('userid', userIds);
-          
-          usersData = basicData || [];
-          usersError = basicError;
-        }
-          
-        const { data: likesData, error: likesError } = await supabase
-          .from('comment_likes')
-          .select('comment_id, userid')
-          .in('comment_id', commentIds);
-
-        const likesMap = {};
-        if (likesData) {
-          likesData.forEach(L => {
-            if (!likesMap[L.comment_id]) likesMap[L.comment_id] = [];
-            likesMap[L.comment_id].push(L.userid);
-          });
-        }
-          
-        if (!usersError && usersData) {
-          const profileMap = {};
-          usersData.forEach(u => { profileMap[u.userid] = { firstname: u.firstname, avatar_url: u.avatar_url, avatar_bg: u.avatar_bg }; });
-          cxData.forEach(c => {
-             const prof = profileMap[c.userid];
-             c.firstname = prof?.firstname || `User_${c.userid.substring(0,5)}`;
-             c.avatar_url = prof?.avatar_url || null;
-             c.avatar_bg = prof?.avatar_bg || null;
-             c.likes = likesMap[c.id] || [];
-          });
-        } else {
-          cxData.forEach(c => { 
-             c.firstname = `User_${c.userid.substring(0,5)}`; 
-             c.avatar_url = null;
-             c.avatar_bg = null;
-             c.likes = likesMap[c.id] || [];
-          });
-        }
-        setComments(cxData);
-      } else {
-        setComments([]);
-      }
-
-      // Fetch Bid History
-      const { data: bxData, error: bxError } = await supabase
-        .from('bid_history')
-        .select('*')
-        .eq('listing_id', listingId)
-        .order('created_at', { ascending: false });
-      if (bxError) console.error('Error fetching bid history:', bxError);
-      if (bxData) setBidHistory(bxData);
-
-      setLoading(false);
     };
-    fetchListing();
-
-    // 1. Subscription for the listing itself (Price, Bid Count)
-    const listingSub = supabase
-      .channel(`listing_update_${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'listings', filter: `id=eq.${id}` }, payload => {
-        if (payload.new) {
-          setListing(payload.new);
+    
+    fetchUser();
+    
+    return () => { mounted = false; };
+  }, []);
+  
+  // ==========================================
+  // DATA SYNC EFFECT
+  // ==========================================
+  
+  useEffect(() => {
+    if (!detail) return;
+    
+    setHeatCount(detail.likes_count || 0);
+    setIsLiked(detail.is_liked || false);
+    setIsBookmarked(detail.is_bookmarked || false);
+    setComments(detail.comments || []);
+    setBidHistory(detail.bid_history || []);
+    
+    if (listing) {
+      const dynamicInc = getDynamicMinBid(listing.CurrentPrice || listing.StartingPrice || 0);
+      const nextIncrement = (listing.CurrentPrice || listing.StartingPrice || 0) + dynamicInc;
+      setBidAmount(nextIncrement.toString());
+    }
+  }, [detail, listing]);
+  
+  // ==========================================
+  // COMMENT TREE MEMO
+  // ==========================================
+  
+  const processedComments = useMemo(() => {
+    if (!comments?.length) return [];
+    
+    const commentMap = new Map();
+    const rootComments = [];
+    
+    for (const c of comments) {
+      commentMap.set(c.id, { ...c, replies: [] });
+    }
+    
+    for (const c of comments) {
+      const node = commentMap.get(c.id);
+      if (c.parent_id && commentMap.has(c.parent_id)) {
+        commentMap.get(c.parent_id).replies.push(node);
+      } else {
+        rootComments.push(node);
+      }
+    }
+    
+    rootComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return rootComments;
+  }, [comments]);
+  
+  const visibleComments = useMemo(() => 
+    commentsExpanded 
+      ? processedComments 
+      : processedComments.slice(0, VISIBLE_COMMENTS),
+    [processedComments, commentsExpanded]
+  );
+  
+  const hiddenCount = processedComments.length - VISIBLE_COMMENTS;
+  
+  // ==========================================
+  // REALTIME SUBSCRIPTIONS
+  // ==========================================
+  
+  useEffect(() => {
+    if (!id) return;
+    
+    const channel = supabase
+      .channel(`listing:${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'listings',
+          filter: `id=eq.${id}`,
+        },
+        () => refreshDetail()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bid_history',
+          filter: `listing_id=eq.${id}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setBidHistory(prev => {
+              if (prev.some(b => b.id === payload.new.id)) return prev;
+              return [payload.new, ...prev].slice(0, 50);
+            });
+          }
         }
-      })
+      )
       .subscribe();
-
-    // 2. Subscription for new bid records (Activity list)
-    const bidSub = supabase
-      .channel(`bid_history_${id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bid_history', filter: `listing_id=eq.${id}` }, payload => {
-        if (payload.new) {
-          setBidHistory(prev => [payload.new, ...prev]);
-        }
-      })
-      .subscribe();
-
+      
     return () => {
-      supabase.removeChannel(listingSub);
-      supabase.removeChannel(bidSub);
+      supabase.removeChannel(channel);
     };
-  }, [id]);
-
+  }, [id, refreshDetail]);
+  
+  // ==========================================
+  // COUNTDOWN TIMER
+  // ==========================================
+  
   useEffect(() => {
     if (!listing?.closes_at) return;
     
-    const updateTime = () => {
+    const calculateTime = () => {
       const diff = new Date(listing.closes_at) - new Date();
-      if (diff <= 0) {
-        setTimeRemainingObj({ closed: true });
-        return;
-      }
+      
+      if (diff <= 0) return { closed: true };
       
       const d = Math.floor(diff / (1000 * 60 * 60 * 24));
       const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const m = String(Math.floor((diff / 1000 / 60) % 60)).padStart(2, '0');
-      const s = String(Math.floor((diff / 1000) % 60)).padStart(2, '0');
+      const m = Math.floor((diff / (1000 * 60)) % 60);
+      const s = Math.floor((diff / 1000) % 60);
       
-      setTimeRemainingObj({ closed: false, d, h, m, s });
-    };
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, [listing?.closes_at]);
-
-  const toggleBookmark = async () => {
-    if (!user) return showAuthPrompt('Log in to save this vehicle to your watchlist.');
+      return {
+        closed: false,
+        d,
+  // Keep timeRemainingObj state for isClosed check, but countdown timer is handled by separate component
+  // CountdownTimer handles its own interval - this state is only for initial closed status
+  
+  // ==========================================
+  // ACTION HANDLERS
+  // ==========================================
+  
+  const toggleBookmark = useCallback(async () => {
+    if (!user) {
+      showAuthPrompt('Log in to save this vehicle to your watchlist.');
+      return;
+    }
+    
     const listingId = Number(id);
+    const previousState = isBookmarked;
+    
+    setIsBookmarked(!previousState);
+    
     try {
-      if (isBookmarked) {
-        const { error } = await supabase.from('bookmarks').delete().eq('listing_id', listingId).eq('userid', user.id);
-        if (error) {
-          console.error('Delete Bookmark Error', error);
-          alert("Could not remove bookmark. Check database permissions.");
-          return;
-        }
-        setIsBookmarked(false);
+      if (previousState) {
+        const { error } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('listing_id', listingId)
+          .eq('userid', user.id);
+          
+        if (error) throw error;
       } else {
-        const { error } = await supabase.from('bookmarks').insert({ listing_id: listingId, userid: user.id });
-        if (error) {
-          console.error('Insert Bookmark Error', error);
-          alert("Could not save bookmark: " + error.message);
-          return;
-        }
-        setIsBookmarked(true);
-        // Notify Owner
+        const { error } = await supabase
+          .from('bookmarks')
+          .insert({ listing_id: listingId, userid: user.id });
+          
+        if (error) throw error;
         sendNotification('bookmark', `followed your ${listing.Year} ${listing.Make} ${listing.Model}`);
       }
-    } catch(err) { console.error('Bookmark Exception', err); }
-  };
-
-  const toggleHeat = async () => {
-    if (!user) return showAuthPrompt('Log in to show some heat on this listing.');
+    } catch (err) {
+      setIsBookmarked(previousState);
+      console.error('Bookmark error:', err);
+      alert(previousState ? 'Could not remove bookmark' : 'Could not save bookmark');
+    }
+  }, [user, id, isBookmarked, listing, currentUserName, showAuthPrompt]);
+  
+  const toggleHeat = useCallback(async () => {
+    if (!user) {
+      showAuthPrompt('Log in to show some heat on this listing.');
+      return;
+    }
+    
     const listingId = Number(id);
+    const previousLiked = isLiked;
+    const previousCount = heatCount;
+    
+    setIsLiked(!previousLiked);
+    setHeatCount(previousLiked ? Math.max(0, previousCount - 1) : previousCount + 1);
+    
     try {
-      if (isLiked) {
-        const { error } = await supabase.from('likes').delete().eq('listing_id', listingId).eq('userid', user.id);
-        if (error) {
-          console.error('Delete Heat Error', error);
-          alert("Could not remove heat. Check database permissions.");
-          return;
-        }
-        setIsLiked(false);
-        setHeatCount(h => Math.max(0, h - 1));
+      if (previousLiked) {
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('listing_id', listingId)
+          .eq('userid', user.id);
+          
+        if (error) throw error;
       } else {
-        const { error } = await supabase.from('likes').insert({ listing_id: listingId, userid: user.id });
-        if (error) {
-          console.error('Insert Heat Error', error);
-          alert("Could not save heat: " + error.message);
-          return;
-        }
-        setIsLiked(true);
-        setHeatCount(h => h + 1);
-
-        await supabase.from('activities').insert({
-          userid: user.id,
-          type: 'like',
-          listing_id: listingId,
-          entitytype: 'car',
-          metadata: { userName: currentUserName, carName: `${listing.Make} ${listing.Model}` }
-        });
-
-        // Notify Owner
-        sendNotification('like', `liked your ${listing.Year} ${listing.Make} ${listing.Model}`);
+        const { error } = await supabase
+          .from('likes')
+          .insert({ listing_id: listingId, userid: user.id });
+          
+        if (error) throw error;
+        
+        Promise.all([
+          supabase.from('activities').insert({
+            userid: user.id,
+            type: 'like',
+            listing_id: listingId,
+            entitytype: 'car',
+            metadata: { 
+              userName: currentUserName, 
+              carName: `${listing.Make} ${listing.Model}` 
+            }
+          }),
+          sendNotification('like', `liked your ${listing.Year} ${listing.Make} ${listing.Model}`)
+        ]).catch(console.error);
       }
-    } catch(err) { console.error('Heat Exception', err); }
-  };
-
-  const sendNotification = async (type, message) => {
-    if (!listing || !user) return;
-    // Don't notify yourself of your own actions
-    if (listing.userid === user.id) return;
-
+    } catch (err) {
+      setIsLiked(previousLiked);
+      setHeatCount(previousCount);
+      console.error('Heat error:', err);
+      alert('Could not update heat');
+    }
+  }, [user, id, isLiked, heatCount, listing, currentUserName, showAuthPrompt]);
+  
+  const sendNotification = useCallback(async (type, message) => {
+    if (!listing?.userid || !user || listing.userid === user.id) return;
+    
     try {
-      // Fetch the user's real name from the users table
-      let userName = 'Someone';
-      const { data: profileData, error: profError } = await supabase
-        .from('users')
-        .select('firstname, lastname')
-        .eq('userid', user.id)
-        .maybeSingle();
-
-      if (profError) {
-        console.error("Profile fetch error in ListingDetail (Init):", profError);
-      }
-
-      if (profileData) {
-        userName = profileData.firstname || 'Someone';
-        if (profileData.lastname) {
-          userName += ` ${profileData.lastname}`;
-        }
-      } else {
-        // Fallback: use the part before @ in their email
-        userName = user.email?.split('@')[0] || 'Someone';
-      }
-
       await supabase.from('notifications').insert({
         recipient_id: listing.userid,
         actor_id: user.id,
         listing_id: Number(id),
-        type: type,
-        message: `${userName} ${message}`,
+        type,
+        message: `${currentUserName} ${message}`,
         is_read: false
       });
     } catch (err) {
-      console.error('Notification Error:', err);
+      console.error('Notification error:', err);
     }
-  };
-
-  const handleCommentLike = async (comment) => {
-    if (!user) return showAuthPrompt('Log in to show heat on comments.');
+  }, [listing?.userid, user, id, currentUserName]);
+  
+  const handleCommentLike = useCallback(async (comment) => {
+    if (!user) {
+      showAuthPrompt('Log in to show heat on comments.');
+      return;
+    }
+    
     const hasLiked = comment.likes?.includes(user.id);
-
+    const commentId = comment.id;
+    
+    setComments(prev => prev.map(c => {
+      if (c.id !== commentId) return c;
+      
+      const newLikes = hasLiked
+        ? (c.likes || []).filter(uid => uid !== user.id)
+        : [...(c.likes || []), user.id];
+        
+      return { ...c, likes: newLikes };
+    }));
+    
     try {
       if (hasLiked) {
-        setComments(prev => prev.map(c => c.id === comment.id ? { ...c, likes: c.likes.filter(uid => uid !== user.id) } : c));
-        await supabase.from('comment_likes').delete().eq('comment_id', comment.id).eq('userid', user.id);
+        await supabase
+          .from('comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('userid', user.id);
       } else {
-        setComments(prev => prev.map(c => c.id === comment.id ? { ...c, likes: [...(c.likes||[]), user.id] } : c));
-        await supabase.from('comment_likes').insert({
-          comment_id: comment.id,
-          userid: user.id,
-          listing_id: Number(id)
+        await supabase.from('comment_likes').insert({ 
+          comment_id: commentId, 
+          userid: user.id, 
+          listing_id: Number(id) 
         });
         
         if (comment.userid !== user.id) {
-          let replySnippet = comment.content.substring(0, 30);
-          if (comment.content.length > 30) replySnippet += '...';
-          await supabase.from('notifications').insert({
+          const snippet = comment.content.substring(0, 30) + (comment.content.length > 30 ? '...' : '');
+          
+          supabase.from('notifications').insert({
             recipient_id: comment.userid,
             actor_id: user.id,
             listing_id: Number(id),
             type: 'like',
-            message: `${currentUserName} showed some heat on your comment: "${replySnippet}"`,
+            message: `${currentUserName} showed some heat on your comment: "${snippet}"`,
             is_read: false
-          });
+          }).catch(console.error);
         }
       }
     } catch (err) {
-      console.error('Like error:', err);
+      setComments(prev => prev.map(c => {
+        if (c.id !== commentId) return c;
+        const revertedLikes = hasLiked
+          ? [...(c.likes || []), user.id]
+          : (c.likes || []).filter(uid => uid !== user.id);
+        return { ...c, likes: revertedLikes };
+      }));
+      console.error('Comment like error:', err);
     }
-  };
+  }, [user, id, currentUserName, showAuthPrompt]);
+  
+  const postComment = useCallback(async () => {
+    if (!user) {
+      showAuthPrompt('Log in to join the discussion on this vehicle.');
+      return;
+    }
+    if (!newComment.trim() || isPostingComment) return;
+    
+    setIsPostingComment(true);
 
-  const postComment = async () => {
-    if (!user) return showAuthPrompt('Log in to join the discussion on this vehicle.');
-    if (!newComment.trim()) return;
     try {
-      const payload = {
-        listing_id: Number(id),
-        userid: user.id,
-        content: newComment
-      };
-      if (replyingTo) {
-        payload.parent_id = replyingTo.id;
-      }
+      const response = await apiClient.post('/handle-content', {
+        action: 'post-comment',
+        payload: {
+          listingId: Number(id),
+          content: newComment,
+          parentId: replyingTo?.id || null
+        }
+      });
 
-      const { data, error } = await supabase.from('comments').insert(payload).select().single();
-      
-      if (error) throw error;
-      
-      data.firstname = currentUserName;
-      
-      setComments(prev => [data, ...prev]);
-      
-      if (!replyingTo) {
-        await supabase.from('activities').insert({
-          userid: user.id,
-          type: 'comment',
-          listing_id: Number(id),
-          entitytype: 'car',
-          metadata: { userName: currentUserName, carName: `${listing.Make} ${listing.Model}`, commentText: newComment }
-        });
-      }
+      if (response.error) throw new Error(response.error);
 
-      if (replyingTo && replyingTo.userid !== user.id) {
-         let parentSnippet = replyingTo.content.substring(0, 20);
-         if (replyingTo.content.length > 20) parentSnippet += '...';
-         
-         let newSnippet = newComment.substring(0, 30);
-         if (newComment.length > 30) newSnippet += '...';
+      const { comment } = response;
+      comment.firstname = currentUserName;
+      comment.likes = [];
+      comment.replies = [];
 
-         await supabase.from('notifications').insert({
-           recipient_id: replyingTo.userid,
-           actor_id: user.id,
-           listing_id: Number(id),
-           type: 'comment',
-           message: `${currentUserName} replied "${newSnippet}" to your comment "${parentSnippet}"`,
-           is_read: false
-         });
-      }
-
-      // Notify Owner if we aren't replying directly to the owner, to ensure they still get an alert
-      if (!replyingTo || (replyingTo && listing.userid !== replyingTo.userid)) {
-        sendNotification('comment', `posted a comment on your ${listing.Year} ${listing.Make} ${listing.Model}`);
-      }
-      
+      setComments(prev => [comment, ...prev]);
       setNewComment('');
       setReplyingTo(null);
       
-    } catch(err) { alert(err.message); }
-  };
-
-  const handleDeleteComment = async (commentId) => {
-    // Optimistic UI update
-    setComments(prev => prev.filter(c => c.id !== commentId));
-    try {
-      await supabase.from('comments').delete().eq('id', commentId);
     } catch (err) {
-      console.error("Delete failed:", err);
+      console.error('Comment post error:', err);
+      alert(err.message || 'Failed to post comment');
+    } finally {
+      setIsPostingComment(false);
     }
-  };
-
-  // Handle reply click - scroll to input
-  const handleReplyClick = (comment) => {
+  }, [user, id, newComment, isPostingComment, replyingTo, currentUserName, showAuthPrompt]);
+  
+  const handleDeleteComment = useCallback(async (commentId) => {
+    const previousComments = comments;
+    
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+        
+      if (error) throw error;
+    } catch (err) {
+      setComments(previousComments);
+      console.error('Delete failed:', err);
+      alert('Could not delete comment');
+    }
+  }, [comments]);
+  
+  const handleReplyClick = useCallback((comment) => {
     setReplyingTo(comment);
-    // Scroll to comment input
-    if (commentInputRef.current) {
-      commentInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Focus the textarea
+    requestAnimationFrame(() => {
+      commentInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setTimeout(() => {
-        const textarea = commentInputRef.current.querySelector('textarea');
-        if (textarea) textarea.focus();
-      }, 300);
-    }
-  };
-
-  const handleBidInput = (e) => {
+        const textarea = commentInputRef.current?.querySelector('textarea');
+        textarea?.focus();
+      }, 350);
+    });
+  }, []);
+  
+  const handleBidInput = useCallback((e) => {
     const rawValue = e.target.value;
+    const cleaned = rawValue
+      .replace(/[^\d.]/g, '')
+      .replace(/(\..*)\./g, '$1')
+      .replace(/^0+(?=\d)/, '');
+      
+    setBidAmount(cleaned);
+    if (bidError) setBidError('');
+  }, [bidError]);
   
-  // Strip non-numeric (except single decimal)
-  const cleaned = rawValue
-    .replace(/[^\d.]/g, '')           // Remove non-numeric
-    .replace(/(\..*)\./g, '$1')      // Prevent multiple decimals
-    .replace(/^0+(?=\d)/, '');        // Remove leading zeros
-  
-  setBidAmount(cleaned);
-  if (bidError) setBidError('');
-};
-const handlePlaceBid = () => {
-  // Clear previous errors
-  setBidError('');
-
-  // Check authentication using secure utility
-  if (!user) {
-    showAuthPrompt('You need to be logged in to place a bid on this vehicle.');
-    return;
-  }
-
-  // Prevent self-bidding
-  if (isOwner) {
-    setBidError('You cannot bid on your own listing.');
-    return;
-  }
-
-  // Prevent bidding if ended
-  if (timeRemainingObj?.closed) {
-    setBidError('Auction has closed.');
-    return;
-  }
-
-  // ⬇️⬇️⬇️ REPLACE parseFloat WITH UTILITY ⬇️⬇️⬇️
-  const currentHighest = listing.CurrentPrice || listing.StartingPrice || 0;
-  
-  const validation = sanitizeBidAmount(bidAmount, currentHighest);
-  
-  if (!validation.valid) {
-    setBidError(validation.error);
-    return;
-  }
-  // ⬆️⬆️⬆️ REPLACE parseFloat WITH UTILITY ⬆️⬆️⬆️
-
-  // Store validated amount for modal (optional: store in state if needed)
-  setBidError('');
-  setShowBidModal(true);
-};
-
-// Step 2: user confirmed — actually submit the bid
-const submitBid = async () => {
-  setShowBidModal(false);
-  setBidding(true);
-  setBidError('');
-
-  try {
-    // ⬇️⬇️⬇️ ADD RATE LIMITING CHECK ⬇️⬇️⬇️
-    const rateCheck = checkBidRateLimit(user.id, listing.id);
-    if (!rateCheck.allowed) {
-      setBidError(rateCheck.error);
-      setBidding(false);
+  const handlePlaceBid = useCallback(() => {
+    setBidError('');
+    
+    if (!user) {
+      showAuthPrompt('You need to be logged in to place a bid on this vehicle.');
       return;
     }
-    // ⬆️⬆️⬆️ ADD RATE LIMITING CHECK ⬆️⬆️⬆️
-
-    // Re-validate amount (security: don't trust client state)
-    const currentHighest = listing.CurrentPrice || listing.StartingPrice || 0;
+    if (isOwner) {
+      setBidError('You cannot bid on your own listing.');
+      return;
+    }
+    if (timeRemainingObj?.closed) {
+      setBidError('Auction has closed.');
+      return;
+    }
+    
+    const currentHighest = listing?.CurrentPrice || listing?.StartingPrice || 0;
     const validation = sanitizeBidAmount(bidAmount, currentHighest);
     
     if (!validation.valid) {
       setBidError(validation.error);
-      setBidding(false);
       return;
     }
-
-    const proposedBid = validation.amount; // Use sanitized amount
-
-    // ─── 1. Find the previous highest bidder BEFORE we update (for notification) ───
-    const { data: prevBidData } = await supabase
-      .from('bid_history')
-      .select('userid, amount')
-      .eq('listing_id', parseInt(id, 10))
-      .order('amount', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const prevLeaderId = prevBidData?.userid ?? null;
-
-    // ─── 2. SAFE BIDDING VIA RPC (Transactional) ───
-    const { error: rpcError } = await supabase.rpc('place_bid', {
-      p_listing_id: Number(id),           // Explicit Number — matches bigint signature
-      p_bid_amount: proposedBid,
-      p_user_id: user.id
-    });
-
-    if (rpcError) throw new Error(rpcError.message);
-
-    // ─── 3. Successful Bid! Notify previous leader & show confirmation ───
-    setBidConfirm({ 
-      amount: proposedBid, 
-      listingName: `${listing.Make} ${listing.Model}` 
-    });
-    setBidAmount(''); // Clear input
-
-    // ─── 4. Log activity ───
-    await supabase.from('activities').insert({
-      userid: user.id,
-      type: 'bid',
-      listing_id: parseInt(id),
-      entitytype: 'car',
-      metadata: { 
-        userName: currentUserName, 
-        carName: `${listing.Make} ${listing.Model}`, 
-        amount: proposedBid 
-      }
-    });
-
-    // ─── 5. Notify previous leader if outbid ───
-    if (prevLeaderId && prevLeaderId !== user.id) {
-      const vehicleName = `${listing.Make} ${listing.Model}`;
-      await supabase.from('notifications').insert({
-        recipient_id: prevLeaderId,
-        actor_id: user.id,
-        listing_id: parseInt(id),
-        type: 'outbid',
-        message: `You've been outbid on the ${vehicleName}! A new bid of ${formatZAR(proposedBid)} has been placed.`,
-        link_url: `/listing/${id}`,
-        is_read: false
+    
+    setBidError('');
+    setShowBidModal(true);
+  }, [user, isOwner, timeRemainingObj, listing, bidAmount, showAuthPrompt]);
+  
+  const submitBid = useCallback(async () => {
+    setShowBidModal(false);
+    setBidding(true);
+    setBidError('');
+    
+    const proposedBid = parseFloat(bidAmount);
+    const previousPrice = listing?.CurrentPrice;
+    
+    try {
+      // 1. Call the Secure API for the bidding transaction
+      const response = await apiClient.post('/place-bid', {
+        p_listing_id: Number(id),
+        p_bid_amount: proposedBid
       });
-    }
 
-    // ─── 6. Notify Owner ───
-    const vehicleName = `${listing.Make} ${listing.Model}`;
-    sendNotification('bid', `placed a bid of ${formatZAR(proposedBid)} on your ${vehicleName}`);
-
-  } catch (err) {
-    setBidError(err.message);
-  } finally {
-    setBidding(false);
-  }
-};
-  const formatZAR = (amount) => {
-    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 }).format(amount || 0);
-  };
-
-  // Process comments for display
-  const getProcessedComments = () => {
-    const commentMap = {};
-    const rootComments = [];
-    
-    // Sort raw comments by created_at ascending so older are at top, making threads natural
-    const sortedComments = [...comments].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
-
-    sortedComments.forEach(c => {
-      commentMap[c.id] = { ...c, replies: [] };
-    });
-    sortedComments.forEach(c => {
-      if (c.parent_id && commentMap[c.parent_id]) {
-        commentMap[c.parent_id].replies.push(commentMap[c.id]);
-      } else {
-        rootComments.push(commentMap[c.id]);
+      if (!response.success) {
+        throw new Error(response.error || 'Bid failed');
       }
-    });
-    
-    // Reverse root comments at the end to keep newer top-level conversations at top
-    return rootComments.reverse();
-  };
+      
+      // 2. Successful Bid! Show confirmation
+      setBidConfirm({ 
+        amount: proposedBid, 
+        listingName: `${listing?.Make} ${listing?.Model}` 
+      });
+      setBidAmount('');
 
-  const processedComments = getProcessedComments();
-  const visibleComments = commentsExpanded ? processedComments : processedComments.slice(0, VISIBLE_COMMENTS);
-  const hiddenCount = processedComments.length - VISIBLE_COMMENTS;
-
-  if (loading) return <LoadingScreen message="Loading vehicle details..." />;
-  if (!listing) return <div style={{color:'white', padding: '40px', textAlign: 'center'}}>Vehicle not found.</div>;
-
-  // Build dynamic image array from all available image columns
-  const allImages = [
-    listing.ImageURL,
-    listing.image2url,
-    listing.image3url,
-    listing.image4url,
-    listing.image5url,
-    listing.image6url,
-    listing.image7url,
-    listing.image8url
-  ].filter(Boolean);
-
-  const goToPrev = () => setActiveImageIndex(i => (i - 1 + allImages.length) % allImages.length);
-  const goToNext = () => setActiveImageIndex(i => (i + 1) % allImages.length);
-
+      // 3. Update local state via refresh
+      await refreshDetail();
+      
+    } catch (err) {
+      if (listing) listing.CurrentPrice = previousPrice;
+      setBidError(err.message || 'Bid failed. Please try again.');
+      // Re-show modal if it was a validation error (optional)
+    } finally {
+      setBidding(false);
+    }
+  }, [bidAmount, listing, id, refreshDetail]);
+  
+  // ==========================================
+  // EARLY RETURNS - ONLY AFTER ALL HOOKS
+  // ==========================================
+  
+  if (userLoading || detailLoading) {
+    return <LoadingScreen message="Loading vehicle details..." />;
+  }
+  
+  if (detailError) {
+    return (
+      <div style={{ color: 'white', padding: '40px', textAlign: 'center' }}>
+        Error loading vehicle: {detailError.message}
+      </div>
+    );
+  }
+  
+  if (!listing) {
+    return (
+      <div style={{ color: 'white', padding: '40px', textAlign: 'center' }}>
+        Vehicle not found.
+      </div>
+    );
+  }
+  
+  const isClosed = listing?.status === 'sold' || timeRemainingObj?.closed;
+  
+  // ==========================================
+  // MAIN RENDER
+  // ==========================================
+  
   return (
     <div className={styles.pageWrapper}>
       <UniversalHeader />
       
-      {/* Auth Prompt Modal */}
       {authPrompt.visible && (
-        <AuthPromptModal message={authPrompt.message} onClose={closeAuthPrompt} />
-      )}
-
-      {/* Bid Confirmation Toast */}
-      {bidConfirm && (
-        <BidConfirmToast
-          amount={bidConfirm.amount}
-          listingName={bidConfirm.listingName}
-          onClose={() => setBidConfirm(null)}
+        <AuthPromptModal 
+          message={authPrompt.message} 
+          onClose={closeAuthPrompt} 
         />
       )}
-
+      
+      {bidConfirm && (
+        <BidConfirmToast 
+          amount={bidConfirm.amount} 
+          listingName={bidConfirm.listingName} 
+          onClose={() => setBidConfirm(null)} 
+        />
+      )}
+      
+      {showReport && (
+        <ReportModal 
+          targetType="listing" 
+          targetId={String(id)} 
+          onClose={() => setShowReport(false)} 
+        />
+      )}
+      
       <div className={styles.mainContainer}>
-        {/* Title Block */}
         <button className={styles.backBtn} onClick={() => navigate('/')}>
           <FaArrowLeft /> Back to Auction Floor
         </button>
+        
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>{listing.Make} <span>{listing.Model}</span></h1>
+          <h1 className={styles.title}>
+            {listing.Make} <span>{listing.Model}</span>
+          </h1>
+          
           <div className={styles.actionIcons}>
             <div className={styles.heatWrap}>
-              <button className={`${styles.iconBtn} ${isLiked ? styles.heatActive : ''}`} onClick={toggleHeat}>
+              <button 
+                className={`${styles.iconBtn} ${isLiked ? styles.heatActive : ''}`} 
+                onClick={toggleHeat}
+                aria-label={isLiked ? 'Unlike' : 'Like'}
+              >
                 <FaFire />
               </button>
               <span className={styles.heatCount}>{heatCount}</span>
             </div>
-            <button className={`${styles.iconBtn} ${isBookmarked ? styles.bookmarked : ''}`} onClick={toggleBookmark}><FaBookmark /></button>
-            <button className={styles.iconBtn}><FaShareAlt /></button>
+            
+            <button 
+              className={`${styles.iconBtn} ${isBookmarked ? styles.bookmarked : ''}`} 
+              onClick={toggleBookmark}
+              aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+            >
+              <FaBookmark />
+            </button>
+            
+            <button className={styles.iconBtn} aria-label="Share">
+              <FaShareAlt />
+            </button>
+            
+            {user && listing?.userid !== user?.id && (
+              <button 
+                className={styles.iconBtn} 
+                onClick={() => setShowReport(true)} 
+                title="Report this listing" 
+                style={{ color: '#6B7280', fontSize: '13px' }}
+                aria-label="Report"
+              >
+                <FaTimes style={{ transform: 'rotate(45deg)' }} />
+              </button>
+            )}
           </div>
         </div>
-
-        {/* Image Gallery */}
+        
+        {/* Gallery - Fixed */}
         <div className={styles.gallerySection}>
           <div className={styles.mainImageContainer}>
-            {listing.status === 'sold' || timeRemainingObj?.closed ? (
-              <div className={styles.liveBadge} style={{ backgroundColor: '#EF4444' }}>CLOSED</div>
+            {isClosed ? (
+              <div className={styles.liveBadge} style={{ backgroundColor: '#EF4444' }}>
+                CLOSED
+              </div>
             ) : (
-              <div className={styles.liveBadge}><div className={styles.dot}></div> LIVE AUCTION</div>
+              <div className={styles.liveBadge}>
+                <div className={styles.dot}></div> LIVE AUCTION
+              </div>
             )}
-            <img src={allImages[activeImageIndex]} alt={listing.Model} className={styles.mainImage} style={{ filter: listing.status === 'sold' || timeRemainingObj?.closed ? 'grayscale(80%) brightness(0.7)' : 'none' }} />
-            {allImages.length > 1 && (
+            
+            {currentImage ? (
+              <img 
+                src={currentImage} 
+                alt={`${listing.Year} ${listing.Make} ${listing.Model}`} 
+                className={styles.mainImage} 
+                style={{ filter: isClosed ? 'grayscale(80%) brightness(0.7)' : 'none' }} 
+              />
+            ) : (
+              <div className={styles.noImagePlaceholder}>No Image Available</div>
+            )}
+            
+            {imageCount > 1 && (
               <>
-                <button className={`${styles.galleryNav} ${styles.galleryNavLeft}`} onClick={goToPrev}><FaChevronLeft /></button>
-                <button className={`${styles.galleryNav} ${styles.galleryNavRight}`} onClick={goToNext}><FaChevronRight /></button>
-                <div className={styles.imageCounter}>{activeImageIndex + 1} / {allImages.length}</div>
+                <button 
+                  className={`${styles.galleryNav} ${styles.galleryNavLeft}`} 
+                  onClick={goToPrev}
+                  aria-label="Previous image"
+                >
+                  <FaChevronLeft />
+                </button>
+                <button 
+                  className={`${styles.galleryNav} ${styles.galleryNavRight}`} 
+                  onClick={goToNext}
+                  aria-label="Next image"
+                >
+                  <FaChevronRight />
+                </button>
+                <div className={styles.imageCounter}>
+                  {currentImageNum} / {imageCount}
+                </div>
               </>
             )}
           </div>
-          {allImages.length > 1 && (
+          
+          {imageCount > 1 && (
             <div className={styles.thumbnailStrip}>
               {allImages.map((url, i) => (
                 <div 
                   key={i} 
-                  className={`${styles.thumbnail} ${i === activeImageIndex ? styles.thumbnailActive : ''}`}
+                  className={`${styles.thumbnail} ${i === activeImageIndex ? styles.thumbnailActive : ''}`} 
                   onClick={() => setActiveImageIndex(i)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View image ${i + 1}`}
                 >
-                  <img src={url} alt={`View ${i + 1}`} />
+                  <img 
+                    src={url} 
+                    alt={`Thumbnail ${i + 1}`} 
+                    loading="lazy"
+                  />
                 </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* Specs Banner */}
+        
+        {/* Specs */}
         <div className={styles.specsBanner}>
-          <div className={styles.specBlock}>
-            <span className={styles.specLabel}>Year</span>
-            <span className={styles.specValue}>{listing.Year}</span>
-          </div>
-          <div className={styles.specBlock}>
-            <span className={styles.specLabel}>Mileage</span>
-            <span className={styles.specValue}>{listing.mileage || '—'}</span>
-          </div>
-          <div className={styles.specBlock}>
-            <span className={styles.specLabel}>Engine</span>
-            <span className={styles.specValue}>{listing.engine || '—'}</span>
-          </div>
-          <div className={styles.specBlock}>
-            <span className={styles.specLabel}>Transmission</span>
-            <span className={styles.specValue}>{listing.transmission || '—'}</span>
-          </div>
-          <div className={styles.specBlock}>
-            <span className={styles.specLabel}>Location</span>
-            <span className={styles.specValue}>{listing.location || '—'}</span>
-          </div>
+          {[
+            { label: 'Year', value: listing.Year },
+            { label: 'Mileage', value: listing.mileage },
+            { label: 'Engine', value: listing.engine },
+            { label: 'Transmission', value: listing.transmission },
+            { label: 'Location', value: listing.location }
+          ].map(spec => (
+            <div key={spec.label} className={styles.specBlock}>
+              <span className={styles.specLabel}>{spec.label}</span>
+              <span className={styles.specValue}>{spec.value || '—'}</span>
+            </div>
+          ))}
         </div>
-
-        {/* BID PANEL - Moved above comments section */}
+        
+        {/* Bid Panel */}
         <div className={styles.bidPanelFullWidth}>
           <div className={styles.bidPanelContent}>
             <div className={styles.bidHeaderRow}>
               <div className={styles.bidLabelGroup}>
                 <span className={styles.bidLabel}>Current Bid</span>
-                <h3 className={styles.bidAmount}>{formatZAR(listing.CurrentPrice || listing.StartingPrice)}</h3>
+                <h3 className={styles.bidAmount}>
+                  {formatZARLocal(listing.CurrentPrice || listing.StartingPrice)}
+                </h3>
                 {listing.ReservePrice > 0 && (
-                  <span style={{fontSize: '12px', fontWeight: 'bold', marginTop: '4px', display: 'inline-block', color: listing.CurrentPrice >= listing.ReservePrice ? '#10B981' : '#F59E0B'}}>
-                    {listing.CurrentPrice >= listing.ReservePrice ? '✓ Reserve Met' : '⚠ Reserve Not Met'}
+                  <span style={{
+                    fontSize: '12px', 
+                    fontWeight: 'bold', 
+                    marginTop: '4px', 
+                    display: 'inline-block', 
+                    color: (listing.CurrentPrice || 0) >= listing.ReservePrice ? '#10B981' : '#F59E0B'
+                  }}>
+                    {(listing.CurrentPrice || 0) >= listing.ReservePrice ? '✓ Reserve Met' : '⚠ Reserve Not Met'}
                   </span>
                 )}
               </div>
-              <div className={styles.bidLabelGroup} style={{textAlign: 'right'}}>
+              
+              <div className={styles.bidLabelGroup} style={{ textAlign: 'right' }}>
                 <span className={styles.bidLabel}>Time Left</span>
-                {timeRemainingObj?.closed ? (
-                  <span className={styles.timeLeft} style={{color: '#EF4444'}}>Closed</span>
-                ) : timeRemainingObj ? (
-                  <span className={styles.timeLeft}>
-                    {timeRemainingObj.d}d : {timeRemainingObj.h}h : {timeRemainingObj.m}m : {timeRemainingObj.s}s
-                  </span>
-                ) : (
-                  <span className={styles.timeLeft}>Calculating...</span>
-                )}
-              </div>
-            </div>
-
-            <div className={styles.bidInputArea}>
-              <span className={styles.maxBidLabel}>
-                {listing.status === 'sold' || timeRemainingObj?.closed ? 'Auction Closed' : isOwner ? 'Your Showroom Listing' : 'Enter Your Max Bid'}
-              </span>
-              <div className={styles.bidInputWrap}>
-                <span className={styles.currencySymbol}>R</span>
-               <input
-                  value={bidAmount}
-                  onChange={handleBidInput}
-                  type="text"                    // Not number (prevents spinners)
-                  inputMode="decimal"            // Mobile numeric keyboard
-                  pattern="^\d+(\.\d{1,2})?$"    // HTML5 validation
-                  maxLength={12}
-                  autoComplete="off"
-                  placeholder="0.00"
+                <CountdownTimer 
+                  closesAt={listing?.closes_at} 
+                  onClose={() => setTimeRemainingObj({ closed: true })}
                 />
               </div>
-              {bidError && <div className={styles.bidErrorMsg}>{bidError}</div>}
+            </div>
+            
+            <div className={styles.bidInputArea}>
+              <span className={styles.maxBidLabel}>
+                {isClosed ? 'Auction Closed' : 
+                 isOwner ? 'Your Showroom Listing' : 
+                 'Enter Your Max Bid'}
+              </span>
               
-              {listing.status === 'sold' || timeRemainingObj?.closed ? (
+              {!isClosed && !isOwner && (
+                <>
+                  <div className={styles.bidInputWrap}>
+                    <span className={styles.currencySymbol}>R</span>
+                    <input 
+                      value={bidAmount} 
+                      onChange={handleBidInput} 
+                      type="text" 
+                      inputMode="decimal" 
+                      pattern="^\d+(\.\d{1,2})?$" 
+                      maxLength={12} 
+                      autoComplete="off" 
+                      placeholder="0.00"
+                      aria-label="Bid amount"
+                    />
+                  </div>
+                  
+                  {bidError && <div className={styles.bidErrorMsg}>{bidError}</div>}
+                  
+                  <button 
+                    onClick={handlePlaceBid} 
+                    disabled={bidding} 
+                    className={styles.placeBidBtn}
+                  >
+                    {bidding ? 'PROCESSING...' : 'PLACE BID'}
+                  </button>
+                </>
+              )}
+              
+              {isClosed && (
                 <div className={styles.ownerNotice} style={{ color: '#EF4444' }}>
                   Bidding has concluded. This vehicle's auction has closed.
                 </div>
-              ) : isOwner ? (
+              )}
+              
+              {isOwner && !isClosed && (
                 <div className={styles.ownerNotice}>
                   This is your listing. You can manage it from the My Inventory page, but self-bidding is restricted.
                 </div>
-              ) : (
-                <button onClick={handlePlaceBid} disabled={bidding} className={styles.placeBidBtn}>
-                  {bidding ? 'PROCESSING...' : 'PLACE BID'}
-                </button>
               )}
             </div>
-
+            
             <div className={styles.escrowNote}>
               <FaShieldAlt /> Escrow Protection Guaranteed
             </div>
-
+            
             <div className={styles.activitySection}>
               <h4 className={styles.activityHeader}>Latest Activity</h4>
               {bidHistory.length > 0 ? (
                 bidHistory.slice(0, 3).map(bid => (
                   <div key={bid.id} className={styles.activityRow}>
-                    <span className={styles.activityUser}>User_{bid.userid.substring(0,5)}</span>
-                    <span>{formatZAR(bid.amount)}</span>
+                    <span className={styles.activityUser}>
+                      User_{bid.userid?.substring(0, 5) || 'XXXXX'}
+                    </span>
+                    <span>{formatZARLocal(bid.amount)}</span>
                   </div>
                 ))
               ) : (
-                <p style={{color: '#9CA3AF', fontSize: '12px'}}>No bids placed yet.</p>
+                <p style={{ color: '#9CA3AF', fontSize: '12px' }}>No bids placed yet.</p>
               )}
-
-              <button className={styles.viewHistory} onClick={() => setShowHistoryModal(true)}>VIEW FULL HISTORY</button>
+              <button 
+                className={styles.viewHistory} 
+                onClick={() => setShowHistoryModal(true)}
+              >
+                VIEW FULL HISTORY
+              </button>
             </div>
           </div>
         </div>
-
-        {/* Content Layout - Comments Section */}
+        
+        {/* Content Grid */}
         <div className={styles.contentGrid} ref={commentsSectionRef}>
-          
-          {/* Left Column - Comments */}
           <div className={styles.commentsColumn}>
             <div className={styles.pitLaneHeader}>
-              <h2 className={styles.sectionTitle} style={{margin: 0}}>The Pit Lane <span className={styles.commentCount}>({comments.length} Comments)</span></h2>
+              <h2 className={styles.sectionTitle} style={{ margin: 0 }}>
+                The Pit Lane <span className={styles.commentCount}>({comments.length} Comments)</span>
+              </h2>
               <button className={styles.sortBtn}>&#8644; RECENT</button>
             </div>
-
-            {/* Comments List */}
+            
             <div className={styles.commentsList}>
               {visibleComments.map(cx => (
                 <CommentNode 
@@ -910,13 +1049,14 @@ const submitBid = async () => {
                   styles={styles} 
                 />
               ))}
-
+              
               {comments.length === 0 && (
-                <p style={{color: '#9CA3AF', marginBottom: '32px', fontSize: '14px'}}>Be the first to start the discussion!</p>
+                <p style={{ color: '#9CA3AF', marginBottom: '32px', fontSize: '14px' }}>
+                  Be the first to start the discussion!
+                </p>
               )}
             </div>
-
-            {/* Expand/Collapse Controls */}
+            
             {!commentsExpanded && hiddenCount > 0 && (
               <button 
                 className={styles.expandCommentsBtn} 
@@ -925,84 +1065,115 @@ const submitBid = async () => {
                 <FaChevronDown /> Show {hiddenCount} more comment{hiddenCount !== 1 ? 's' : ''}
               </button>
             )}
-
-            {/* Comment Input Box */}
+            
             <div className={styles.commentInputBox} ref={commentInputRef}>
               {replyingTo && (
-                 <div className={styles.replyingToBanner}>
-                    <span>Replying to {replyingTo.firstname}</span>
-                    <button className={styles.cancelReplyBtn} onClick={() => setReplyingTo(null)}><FaTimes /></button>
-                 </div>
+                <div className={styles.replyingToBanner}>
+                  <span>Replying to {replyingTo.firstname}</span>
+                  <button 
+                    className={styles.cancelReplyBtn} 
+                    onClick={() => setReplyingTo(null)}
+                    aria-label="Cancel reply"
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
               )}
+              
               <textarea 
                 placeholder={replyingTo ? "Write your reply..." : "Join the discussion..."} 
-                className={styles.commentTextArea}
-                value={newComment}
+                className={styles.commentTextArea} 
+                value={newComment} 
                 onChange={(e) => setNewComment(e.target.value)}
-              ></textarea>
-              <button className={styles.postBtn} onClick={postComment}>POST COMMENT</button>
+                disabled={isPostingComment}
+                maxLength={1000}
+              />
+              
+              <button 
+                className={styles.postBtn} 
+                onClick={postComment}
+                disabled={isPostingComment || !newComment.trim()}
+              >
+                {isPostingComment ? 'POSTING...' : 'POST COMMENT'}
+              </button>
             </div>
-
           </div>
-
-          {/* Right Column - Curator's Note (moved from left) */}
+          
           <div className={styles.infoColumn}>
             <h2 className={styles.sectionTitle}>Curator's Note</h2>
             <p className={styles.curatorText}>
-              This {listing.Year} {listing.Make} {listing.Model} is a masterpiece of aerodynamic engineering. Finished in 
-              stunning paintwork over premium trim, this example features the high performance package which adds lightweight 
-              wheels and exposed carbon fiber elements. Delivered new to the current owner, it has been maintained in a 
-              climate-controlled facility with zero track time recorded.
+              This {listing.Year} {listing.Make} {listing.Model} is a masterpiece of aerodynamic engineering. 
+              Finished in stunning paintwork over premium trim, this example features the high performance 
+              package which adds lightweight wheels and exposed carbon fiber elements. Delivered new to 
+              the current owner, it has been maintained in a climate-controlled facility with zero track time recorded.
             </p>
           </div>
-
         </div>
       </div>
-
-      {/* Sticky Collapse Button - Only visible when comments are expanded */}
+      
       {commentsExpanded && comments.length > VISIBLE_COMMENTS && (
         <button 
-          className={styles.stickyCollapseBtn}
-          onClick={() => {
-            setCommentsExpanded(false);
-            commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          className={styles.stickyCollapseBtn} 
+          onClick={() => { 
+            setCommentsExpanded(false); 
+            commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); 
           }}
         >
           <FaChevronUp /> Collapse Comments
         </button>
       )}
-
-      {/* Full Bid History Modal */}
+      
       {showHistoryModal && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modalContent}>
+        <div className={styles.modalOverlay} onClick={() => setShowHistoryModal(false)}>
+          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
             <div className={styles.modalTitle}>
-              Bid History <button className={styles.closeBtn} onClick={() => setShowHistoryModal(false)}><FaTimes /></button>
+              Bid History 
+              <button 
+                className={styles.closeBtn} 
+                onClick={() => setShowHistoryModal(false)}
+                aria-label="Close"
+              >
+                <FaTimes />
+              </button>
             </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px'}}>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
               {bidHistory.map(bid => (
-                <div key={bid.id} className={styles.activityRow} style={{fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px'}}>
-                  <span className={styles.activityUser}>User_{bid.userid.substring(0,5)}</span>
-                  <span style={{color: '#fff', fontWeight: 'bold'}}>{formatZAR(bid.amount)}</span>
+                <div 
+                  key={bid.id} 
+                  className={styles.activityRow} 
+                  style={{ 
+                    fontSize: '14px', 
+                    borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                    paddingBottom: '12px' 
+                  }}
+                >
+                  <span className={styles.activityUser}>
+                    User_{bid.userid?.substring(0, 5) || 'XXXXX'}
+                  </span>
+                  <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                    {formatZARLocal(bid.amount)}
+                  </span>
                 </div>
               ))}
-              {bidHistory.length === 0 && <p style={{color: '#9CA3AF'}}>No bids yet.</p>}
+              
+              {bidHistory.length === 0 && (
+                <p style={{ color: '#9CA3AF' }}>No bids yet.</p>
+              )}
             </div>
           </div>
         </div>
       )}
-
-      {/* Pre-submit Bid Confirmation Modal */}
+      
       {showBidModal && listing && (
-        <BidConfirmModal
-          amount={parseFloat(bidAmount)}
-          currentPrice={listing.CurrentPrice || listing.StartingPrice || 0}
-          listingName={`${listing.Year} ${listing.Make} ${listing.Model}`}
-          onConfirm={submitBid}
-          onCancel={() => setShowBidModal(false)}
+        <BidConfirmModal 
+          amount={parseFloat(bidAmount)} 
+          currentPrice={listing.CurrentPrice || listing.StartingPrice || 0} 
+          listingName={`${listing.Year} ${listing.Make} ${listing.Model}`} 
+          onConfirm={submitBid} 
+          onCancel={() => setShowBidModal(false)} 
         />
       )}
-
     </div>
   );
 };
